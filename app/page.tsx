@@ -2,94 +2,479 @@
 
 import { useState, useEffect } from 'react';
 
-// Define the Job type
 type Job = {
   _id: string;
   company: string;
   position: string;
   status: string;
+  location?: string;
+  salary?: string;
+  jobDescription?: string;
+  notes?: string;
   createdAt: string;
 };
 
+type FormState = {
+  company: string;
+  position: string;
+  status: string;
+  location: string;
+  salary: string;
+  jobDescription: string;
+  notes: string;
+};
+
+type AiOutput = { type: 'tailor' | 'cover'; content: string };
+
+const STATUSES = ['saved', 'applied', 'interview', 'offer', 'rejected'] as const;
+
+const STATUS_STYLE: Record<string, string> = {
+  saved:     'bg-blue-100 text-blue-800',
+  applied:   'bg-amber-100 text-amber-800',
+  interview: 'bg-purple-100 text-purple-800',
+  offer:     'bg-green-100 text-green-800',
+  rejected:  'bg-red-100 text-red-800',
+};
+
+const ANALYTICS_STYLE: Record<string, string> = {
+  saved:     'bg-blue-50 border-blue-200 text-blue-700',
+  applied:   'bg-amber-50 border-amber-200 text-amber-700',
+  interview: 'bg-purple-50 border-purple-200 text-purple-700',
+  offer:     'bg-green-50 border-green-200 text-green-700',
+  rejected:  'bg-red-50 border-red-200 text-red-700',
+};
+
+const EMPTY_FORM: FormState = {
+  company: '', position: '', status: 'saved',
+  location: '', salary: '', jobDescription: '', notes: '',
+};
+
 export default function Home() {
-  const [jobs, setJobs] = useState<Job[]>([]); // Fix: specify the type
-  const [company, setCompany] = useState('');
-  const [position, setPosition] = useState('');
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addState, setAddState] = useState<FormState>(EMPTY_FORM);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editState, setEditState] = useState<FormState>(EMPTY_FORM);
+
+  const [myResume, setMyResume] = useState('');
+  const [resumeSaved, setResumeSaved] = useState(false);
+  const [showResumePanel, setShowResumePanel] = useState(false);
+
+  const [aiOpenId, setAiOpenId] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState<'tailor' | 'cover' | null>(null);
+  const [aiOutput, setAiOutput] = useState<AiOutput | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Load jobs
   useEffect(() => {
-    fetch('/api/jobs')
-      .then(res => res.json())
-      .then(data => setJobs(data));
+    fetch('/api/jobs').then(r => r.json()).then(setJobs);
   }, []);
 
-  // Add job
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Load resume from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('myResume');
+    if (saved) { setMyResume(saved); setResumeSaved(true); }
+  }, []);
 
+  // Analytics counts
+  const counts = STATUSES.reduce((acc, s) => {
+    acc[s] = jobs.filter(j => j.status === s).length;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // --- Resume ---
+  const handleSaveResume = () => {
+    localStorage.setItem('myResume', myResume);
+    setResumeSaved(true);
+  };
+
+  // --- Add ---
+  const handleAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
     const res = await fetch('/api/jobs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ company, position, status: 'saved' })
+      body: JSON.stringify(addState),
     });
-
     const newJob = await res.json();
     setJobs([newJob, ...jobs]);
-    setCompany('');
-    setPosition('');
+    setAddState(EMPTY_FORM);
+    setShowAddForm(false);
+  };
+
+  // --- Edit ---
+  const startEdit = (job: Job) => {
+    setEditingId(job._id);
+    setEditState({
+      company: job.company,
+      position: job.position,
+      status: job.status,
+      location: job.location || '',
+      salary: job.salary || '',
+      jobDescription: job.jobDescription || '',
+      notes: job.notes || '',
+    });
+  };
+
+  const saveEdit = async (id: string) => {
+    const res = await fetch(`/api/jobs/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editState),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setJobs(jobs.map(j => j._id === id ? updated : j));
+      setEditingId(null);
+    }
+  };
+
+  // --- Delete ---
+  const deleteJob = async (id: string) => {
+    const res = await fetch(`/api/jobs/${id}`, { method: 'DELETE' });
+    if (res.ok) setJobs(jobs.filter(j => j._id !== id));
+  };
+
+  const deleteAll = async () => {
+    if (!confirm('Delete all jobs? This cannot be undone.')) return;
+    await fetch('/api/jobs', { method: 'DELETE' });
+    setJobs([]);
+  };
+
+  // --- AI ---
+  const openAiPanel = (jobId: string) => {
+    const newId = aiOpenId === jobId ? null : jobId;
+    setAiOpenId(newId);
+    setAiOutput(null);
+    setAiError(null);
+  };
+
+  const runAI = async (job: Job, type: 'tailor' | 'cover') => {
+    setAiLoading(type);
+    setAiOutput(null);
+    setAiError(null);
+
+    const endpoint = type === 'tailor' ? '/api/ai/tailor' : '/api/ai/cover-letter';
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jobDescription: job.jobDescription,
+        resume: myResume,
+        company: job.company,
+        position: job.position,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      setAiError(data.error || 'Something went wrong');
+    } else {
+      setAiOutput({ type, content: data.result });
+    }
+    setAiLoading(null);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-8">
-      <h1 className="text-3xl font-bold mb-8">Job Tracker</h1>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-5xl mx-auto px-4 py-6 sm:px-6">
 
-      {/* Add Job Form */}
-      <form onSubmit={handleSubmit} className="mb-8 p-6 border rounded-lg">
-        <h2 className="text-xl font-semibold mb-4">Add New Job</h2>
-
-        <input
-          type="text"
-          placeholder="Company"
-          value={company}
-          onChange={(e) => setCompany(e.target.value)}
-          className="w-full p-2 mb-4 border rounded"
-          required
-        />
-
-        <input
-          type="text"
-          placeholder="Position"
-          value={position}
-          onChange={(e) => setPosition(e.target.value)}
-          className="w-full p-2 mb-4 border rounded"
-          required
-        />
-
-        <button
-          type="submit"
-          className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600"
-        >
-          Add Job
-        </button>
-      </form>
-
-      {/* Job List */}
-      <div>
-        <h2 className="text-xl font-semibold mb-4">Your Jobs ({jobs.length})</h2>
-
-        {jobs.map((job) => (
-          <div key={job._id} className="p-4 mb-4 border rounded-lg">
-            <h3 className="font-bold text-lg">{job.position}</h3>
-            <p className="text-gray-600">{job.company}</p>
-            <span className="inline-block mt-2 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
-              {job.status}
-            </span>
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 mb-6">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Job Command Center</h1>
+            <p className="text-gray-500 mt-1 text-sm">{jobs.length} application{jobs.length !== 1 ? 's' : ''} tracked</p>
           </div>
-        ))}
+          <button
+            onClick={() => { setShowAddForm(!showAddForm); setEditingId(null); }}
+            className="shrink-0 bg-blue-600 text-white px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg hover:bg-blue-700 font-medium text-sm"
+          >
+            + Add Job
+          </button>
+        </div>
 
-        {jobs.length === 0 && (
-          <p className="text-gray-500">No jobs yet. Add your first one above!</p>
+        {/* Analytics Bar */}
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3 mb-6">
+          {STATUSES.map(status => (
+            <div key={status} className={`border rounded-lg p-2 sm:p-3 text-center ${ANALYTICS_STYLE[status]}`}>
+              <div className="text-xl sm:text-2xl font-bold">{counts[status]}</div>
+              <div className="text-xs capitalize font-medium mt-0.5">{status}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* My Resume Panel */}
+        <div className="mb-6 border rounded-lg bg-white shadow-sm">
+          <button
+            onClick={() => setShowResumePanel(!showResumePanel)}
+            className="w-full flex items-center justify-between p-4 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-gray-800">My Resume</span>
+              {resumeSaved && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Saved</span>}
+            </div>
+            <span className="text-gray-400 text-sm">{showResumePanel ? '▲ collapse' : '▼ expand'}</span>
+          </button>
+          {showResumePanel && (
+            <div className="px-4 pb-4">
+              <p className="text-sm text-gray-500 mb-2">Paste your base resume here. It's stored locally and used by AI to tailor applications and write cover letters.</p>
+              <textarea
+                value={myResume}
+                onChange={e => { setMyResume(e.target.value); setResumeSaved(false); }}
+                placeholder="Paste your full resume here..."
+                className="w-full h-52 p-3 border rounded text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
+              />
+              <button
+                onClick={handleSaveResume}
+                disabled={!myResume}
+                className="mt-2 bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-900 text-sm disabled:opacity-40"
+              >
+                Save Resume Locally
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Add Job Form */}
+        {showAddForm && (
+          <form onSubmit={handleAdd} className="mb-6 p-4 sm:p-6 border rounded-lg bg-white shadow-sm">
+            <h2 className="text-lg font-semibold mb-4 text-gray-800">Add New Job</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+              <input
+                placeholder="Company *" required value={addState.company}
+                onChange={e => setAddState({ ...addState, company: e.target.value })}
+                className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
+              />
+              <input
+                placeholder="Position *" required value={addState.position}
+                onChange={e => setAddState({ ...addState, position: e.target.value })}
+                className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
+              />
+              <input
+                placeholder="Location" value={addState.location}
+                onChange={e => setAddState({ ...addState, location: e.target.value })}
+                className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
+              />
+              <input
+                placeholder="Salary / Range" value={addState.salary}
+                onChange={e => setAddState({ ...addState, salary: e.target.value })}
+                className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
+              />
+            </div>
+            <textarea
+              placeholder="Job Description — paste here to unlock AI tailoring"
+              value={addState.jobDescription}
+              onChange={e => setAddState({ ...addState, jobDescription: e.target.value })}
+              className="w-full p-2 border rounded mb-3 h-28 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+            <textarea
+              placeholder="Notes (optional)"
+              value={addState.notes}
+              onChange={e => setAddState({ ...addState, notes: e.target.value })}
+              className="w-full p-2 border rounded mb-4 h-16 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
+            />
+            <div className="flex gap-2">
+              <button type="submit" className="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700 text-sm font-medium">
+                Add Job
+              </button>
+              <button type="button" onClick={() => setShowAddForm(false)} className="bg-gray-100 text-gray-700 px-5 py-2 rounded hover:bg-gray-200 text-sm">
+                Cancel
+              </button>
+            </div>
+          </form>
         )}
+
+        {/* Job List */}
+        <div className="space-y-3">
+          {jobs.map(job => (
+            <div key={job._id} className="border rounded-lg bg-white shadow-sm overflow-hidden">
+
+              {editingId === job._id ? (
+                /* ── Edit Mode ── */
+                <div className="p-4 sm:p-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                    <input
+                      value={editState.company} placeholder="Company"
+                      onChange={e => setEditState({ ...editState, company: e.target.value })}
+                      className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                    <input
+                      value={editState.position} placeholder="Position"
+                      onChange={e => setEditState({ ...editState, position: e.target.value })}
+                      className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                    <input
+                      value={editState.location} placeholder="Location"
+                      onChange={e => setEditState({ ...editState, location: e.target.value })}
+                      className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                    <input
+                      value={editState.salary} placeholder="Salary / Range"
+                      onChange={e => setEditState({ ...editState, salary: e.target.value })}
+                      className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    />
+                  </div>
+                  <select
+                    value={editState.status}
+                    onChange={e => setEditState({ ...editState, status: e.target.value })}
+                    className="w-full p-2 border rounded mb-3 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  >
+                    {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <textarea
+                    value={editState.jobDescription} placeholder="Job Description"
+                    onChange={e => setEditState({ ...editState, jobDescription: e.target.value })}
+                    className="w-full p-2 border rounded mb-3 h-28 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  />
+                  <textarea
+                    value={editState.notes} placeholder="Notes"
+                    onChange={e => setEditState({ ...editState, notes: e.target.value })}
+                    className="w-full p-2 border rounded mb-4 h-16 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  />
+                  <div className="flex gap-2">
+                    <button onClick={() => saveEdit(job._id)} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm font-medium">
+                      Save
+                    </button>
+                    <button onClick={() => setEditingId(null)} className="bg-gray-100 text-gray-700 px-4 py-2 rounded hover:bg-gray-200 text-sm">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+
+              ) : (
+                /* ── View Mode ── */
+                <div>
+                  <div className="p-4 sm:p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h3 className="font-bold text-lg text-gray-900 leading-tight">{job.position}</h3>
+                        <p className="text-gray-600 font-medium">{job.company}</p>
+                        <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-gray-500">
+                          {job.location && <span>📍 {job.location}</span>}
+                          {job.salary && <span>💰 {job.salary}</span>}
+                          <span className="text-gray-400">
+                            Added {new Date(job.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                      <span className={`shrink-0 px-3 py-1 rounded-full text-sm font-medium capitalize ${STATUS_STYLE[job.status] || 'bg-gray-100 text-gray-700'}`}>
+                        {job.status}
+                      </span>
+                    </div>
+
+                    {job.notes && (
+                      <p className="mt-3 text-sm text-gray-600 bg-gray-50 rounded-md p-3 border border-gray-100">
+                        {job.notes}
+                      </p>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-2 mt-4">
+                      <button
+                        onClick={() => startEdit(job)}
+                        className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-200 text-sm"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteJob(job._id)}
+                        className="bg-red-50 text-red-600 px-3 py-1.5 rounded hover:bg-red-100 text-sm"
+                      >
+                        Delete
+                      </button>
+                      {job.jobDescription && (
+                        <button
+                          onClick={() => openAiPanel(job._id)}
+                          className="sm:ml-auto bg-purple-600 text-white px-3 py-1.5 rounded hover:bg-purple-700 text-sm font-medium"
+                        >
+                          ✨ AI Tools {aiOpenId === job._id ? '▲' : '▼'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* AI Panel */}
+                  {aiOpenId === job._id && (
+                    <div className="border-t bg-purple-50 p-4 sm:p-5">
+                      {!myResume ? (
+                        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-3 mb-4">
+                          ⚠️ Add your resume in the "My Resume" section above to use AI tools.
+                        </p>
+                      ) : null}
+
+                      <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                        <button
+                          onClick={() => runAI(job, 'tailor')}
+                          disabled={!myResume || aiLoading !== null}
+                          className="w-full sm:w-auto bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 disabled:opacity-40 text-sm font-medium"
+                        >
+                          {aiLoading === 'tailor' ? '⏳ Tailoring...' : '📝 Tailor My Resume'}
+                        </button>
+                        <button
+                          onClick={() => runAI(job, 'cover')}
+                          disabled={!myResume || aiLoading !== null}
+                          className="w-full sm:w-auto bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 disabled:opacity-40 text-sm font-medium"
+                        >
+                          {aiLoading === 'cover' ? '⏳ Writing...' : '✉️ Write Cover Letter'}
+                        </button>
+                      </div>
+
+                      {aiError && (
+                        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3 mb-4">
+                          ❌ {aiError}
+                        </p>
+                      )}
+
+                      {aiOutput && (
+                        <div className="bg-white border rounded-lg overflow-hidden">
+                          <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+                            <h4 className="font-semibold text-sm text-gray-700">
+                              {aiOutput.type === 'tailor' ? '📝 Tailored Resume' : '✉️ Cover Letter'}
+                            </h4>
+                            <button
+                              onClick={() => copyToClipboard(aiOutput.content)}
+                              className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                            >
+                              {copied ? '✓ Copied!' : 'Copy to clipboard'}
+                            </button>
+                          </div>
+                          <pre className="p-4 text-sm text-gray-800 whitespace-pre-wrap font-mono leading-relaxed max-h-96 overflow-y-auto">
+                            {aiOutput.content}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {jobs.length === 0 && !showAddForm && (
+            <div className="text-center py-20 text-gray-400">
+              <p className="text-5xl mb-4">📋</p>
+              <p className="text-lg font-medium">No jobs tracked yet</p>
+              <p className="text-sm mt-1">Click "+ Add Job" to get started</p>
+            </div>
+          )}
+        </div>
+
+        {/* Danger Zone */}
+        {jobs.length > 0 && (
+          <div className="mt-10 pt-6 border-t text-center">
+            <button onClick={deleteAll} className="text-red-400 hover:text-red-600 text-sm">
+              Delete all jobs
+            </button>
+          </div>
+        )}
+
       </div>
     </div>
   );
