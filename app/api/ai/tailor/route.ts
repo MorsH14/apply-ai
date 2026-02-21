@@ -1,24 +1,25 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 
 export async function POST(request: Request) {
   const { jobDescription, resume, company, position } = await request.json();
 
-  if (!process.env.GOOGLE_AI_API_KEY) {
+  if (!process.env.GROQ_API_KEY) {
     return NextResponse.json(
-      { error: "GOOGLE_AI_API_KEY is not set in .env.local" },
+      { error: "GROQ_API_KEY is not set in .env.local" },
       { status: 500 }
     );
   }
 
   try {
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
-    const model = genAI.getGenerativeModel(
-      { model: "gemini-1.5-flash" },
-      { apiVersion: "v1" }
-    );
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-    const prompt = `You are an expert resume writer and career coach. Tailor the following resume for this specific job opportunity.
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        {
+          role: "user",
+          content: `You are an expert resume writer and career coach. Tailor the following resume for this specific job opportunity.
 
 Job: ${position} at ${company}
 
@@ -33,14 +34,17 @@ Instructions:
 - Reorder and emphasize skills/experiences that match the job requirements
 - Incorporate relevant keywords from the job description naturally
 - Keep it ATS-friendly and concise
-- Return ONLY the tailored resume text, no commentary or preamble`;
+- Return ONLY the tailored resume text, no commentary or preamble`,
+        },
+      ],
+      max_tokens: 2048,
+    });
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    const text = completion.choices[0].message.content ?? "";
     return NextResponse.json({ result: text });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("Gemini tailor error:", message);
+    console.error("Groq tailor error:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
