@@ -244,26 +244,37 @@ export default function Home() {
       <div className="max-w-5xl mx-auto px-4 py-6 sm:px-6">
 
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 mb-6">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Job Command Center</h1>
-            <p className="text-gray-500 mt-1 text-sm">{jobs.length} application{jobs.length !== 1 ? 's' : ''} tracked</p>
+        <div className="flex items-center justify-between gap-3 mb-6">
+          {/* Genova logo */}
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white font-bold text-lg shrink-0 shadow-sm">
+              G
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 leading-none">Genova</h1>
+              <p className="text-xs text-gray-400 mt-0.5">{jobs.length} application{jobs.length !== 1 ? 's' : ''} tracked</p>
+            </div>
           </div>
+
+          {/* Actions */}
           <div className="flex items-center gap-2 shrink-0">
             {session?.user?.name && (
-              <span className="hidden sm:block text-sm text-gray-500">
-                👤 {session.user.name}
+              <span className="hidden sm:flex items-center gap-1.5 text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
+                <span className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold">
+                  {session.user.name[0].toUpperCase()}
+                </span>
+                {session.user.name}
               </span>
             )}
             <button
               onClick={() => { setShowAddForm(!showAddForm); setEditingId(null); }}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium text-sm"
+              className="bg-gradient-to-r from-blue-600 to-violet-600 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-violet-700 font-medium text-sm shadow-sm"
             >
               + Add Job
             </button>
             <button
               onClick={() => signOut({ callbackUrl: '/login' })}
-              className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200 text-sm font-medium"
+              className="bg-gray-100 text-gray-500 px-3 py-2 rounded-lg hover:bg-gray-200 text-sm font-medium"
             >
               Sign out
             </button>

@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Job Command Center",
-  description: "Track your job applications and tailor your resume with AI",
+  title: "Genova — Apply smarter. Land faster.",
+  description: "Your AI-powered job search command center. Track applications, tailor your resume, and generate cover letters instantly.",
 };
 
 export default function RootLayout({
