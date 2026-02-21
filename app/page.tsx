@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSession, signOut } from 'next-auth/react';
 
 type Job = {
   _id: string;
@@ -50,6 +51,7 @@ const EMPTY_FORM: FormState = {
 };
 
 export default function Home() {
+  const { data: session } = useSession();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [addState, setAddState] = useState<FormState>(EMPTY_FORM);
@@ -183,6 +185,48 @@ export default function Home() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const downloadPDF = async (content: string, type: 'tailor' | 'cover', company: string, position: string) => {
+    const { jsPDF } = await import('jspdf');
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+
+    const margin = 20;
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const maxWidth = pageWidth - margin * 2;
+    const lineHeight = 6.5;
+    let y = margin;
+
+    // Title
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    const title = type === 'tailor'
+      ? `Tailored Resume — ${position} at ${company}`
+      : `Cover Letter — ${position} at ${company}`;
+    const titleLines = doc.splitTextToSize(title, maxWidth);
+    doc.text(titleLines, margin, y);
+    y += titleLines.length * lineHeight + 4;
+
+    // Divider
+    doc.setDrawColor(180);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += lineHeight;
+
+    // Body
+    doc.setFontSize(10.5);
+    doc.setFont('helvetica', 'normal');
+    for (const line of content.split('\n')) {
+      const wrapped = doc.splitTextToSize(line || ' ', maxWidth);
+      for (const wl of wrapped) {
+        if (y > pageHeight - margin) { doc.addPage(); y = margin; }
+        doc.text(wl, margin, y);
+        y += lineHeight;
+      }
+    }
+
+    const slug = company.toLowerCase().replace(/\s+/g, '-');
+    doc.save(type === 'tailor' ? `resume-${slug}.pdf` : `cover-letter-${slug}.pdf`);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-5xl mx-auto px-4 py-6 sm:px-6">
@@ -193,12 +237,25 @@ export default function Home() {
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Job Command Center</h1>
             <p className="text-gray-500 mt-1 text-sm">{jobs.length} application{jobs.length !== 1 ? 's' : ''} tracked</p>
           </div>
-          <button
-            onClick={() => { setShowAddForm(!showAddForm); setEditingId(null); }}
-            className="shrink-0 bg-blue-600 text-white px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg hover:bg-blue-700 font-medium text-sm"
-          >
-            + Add Job
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {session?.user?.name && (
+              <span className="hidden sm:block text-sm text-gray-500">
+                👤 {session.user.name}
+              </span>
+            )}
+            <button
+              onClick={() => { setShowAddForm(!showAddForm); setEditingId(null); }}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium text-sm"
+            >
+              + Add Job
+            </button>
+            <button
+              onClick={() => signOut({ callbackUrl: '/login' })}
+              className="bg-gray-100 text-gray-600 px-3 py-2 rounded-lg hover:bg-gray-200 text-sm font-medium"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
 
         {/* Analytics Bar */}
@@ -438,12 +495,27 @@ export default function Home() {
                             <h4 className="font-semibold text-sm text-gray-700">
                               {aiOutput.type === 'tailor' ? '📝 Tailored Resume' : '✉️ Cover Letter'}
                             </h4>
-                            <button
-                              onClick={() => copyToClipboard(aiOutput.content)}
-                              className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                            >
-                              {copied ? '✓ Copied!' : 'Copy to clipboard'}
-                            </button>
+                            <div className="flex items-center gap-3">
+                              <button
+                                onClick={() => copyToClipboard(aiOutput.content)}
+                                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                              >
+                                {copied ? '✓ Copied!' : 'Copy'}
+                              </button>
+                              <button
+                                onClick={() => downloadPDF(aiOutput.content, aiOutput.type, job.company, job.position)}
+                                className="text-xs bg-gray-800 text-white px-2.5 py-1 rounded hover:bg-gray-900 font-medium"
+                              >
+                                ↓ Download PDF
+                              </button>
+                              <button
+                                onClick={() => setAiOutput(null)}
+                                className="text-gray-400 hover:text-gray-700 text-lg leading-none font-medium ml-1"
+                                aria-label="Close"
+                              >
+                                ×
+                              </button>
+                            </div>
                           </div>
                           <pre className="p-4 text-sm text-gray-800 whitespace-pre-wrap font-mono leading-relaxed max-h-96 overflow-y-auto">
                             {aiOutput.content}
