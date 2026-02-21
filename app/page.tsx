@@ -60,7 +60,9 @@ export default function Home() {
   const [editState, setEditState] = useState<FormState>(EMPTY_FORM);
 
   const [myResume, setMyResume] = useState('');
-  const [resumeSaved, setResumeSaved] = useState(false);
+  const [resumeDraft, setResumeDraft] = useState('');
+  const [resumeSaving, setResumeSaving] = useState(false);
+  const [resumeSavedAt, setResumeSavedAt] = useState<Date | null>(null);
   const [showResumePanel, setShowResumePanel] = useState(false);
 
   const [aiOpenId, setAiOpenId] = useState<string | null>(null);
@@ -74,10 +76,13 @@ export default function Home() {
     fetch('/api/jobs').then(r => r.json()).then(setJobs);
   }, []);
 
-  // Load resume from localStorage
+  // Load resume from account
   useEffect(() => {
-    const saved = localStorage.getItem('myResume');
-    if (saved) { setMyResume(saved); setResumeSaved(true); }
+    fetch('/api/resume')
+      .then(r => r.json())
+      .then(data => {
+        if (data.resume) { setMyResume(data.resume); setResumeDraft(data.resume); }
+      });
   }, []);
 
   // Analytics counts
@@ -87,9 +92,16 @@ export default function Home() {
   }, {} as Record<string, number>);
 
   // --- Resume ---
-  const handleSaveResume = () => {
-    localStorage.setItem('myResume', myResume);
-    setResumeSaved(true);
+  const handleSaveResume = async () => {
+    setResumeSaving(true);
+    await fetch('/api/resume', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume: resumeDraft }),
+    });
+    setMyResume(resumeDraft);
+    setResumeSavedAt(new Date());
+    setResumeSaving(false);
   };
 
   // --- Add ---
@@ -269,33 +281,51 @@ export default function Home() {
         </div>
 
         {/* My Resume Panel */}
-        <div className="mb-6 border rounded-lg bg-white shadow-sm">
+        <div className="mb-6 border rounded-xl bg-white shadow-sm overflow-hidden">
           <button
             onClick={() => setShowResumePanel(!showResumePanel)}
-            className="w-full flex items-center justify-between p-4 text-left"
+            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
           >
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-gray-800">My Resume</span>
-              {resumeSaved && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Saved</span>}
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 text-base">
+                📄
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900 text-sm">My Resume</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {myResume
+                    ? `${myResume.trim().split(/\s+/).length} words · ${resumeSavedAt ? `Saved ${resumeSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Saved'}`
+                    : 'Not added yet — required for AI tools'}
+                </p>
+              </div>
             </div>
-            <span className="text-gray-400 text-sm">{showResumePanel ? '▲ collapse' : '▼ expand'}</span>
+            <span className="text-gray-400 text-xs font-medium">{showResumePanel ? '▲ Collapse' : '▼ Edit'}</span>
           </button>
+
           {showResumePanel && (
-            <div className="px-4 pb-4">
-              <p className="text-sm text-gray-500 mb-2">Paste your base resume here. It's stored locally and used by AI to tailor applications and write cover letters.</p>
+            <div className="border-t px-5 py-5">
+              <p className="text-sm text-gray-500 mb-4 leading-relaxed">
+                Paste your master resume below. It is stored securely with your account and is only used when you click <strong>Tailor My Resume</strong> or <strong>Write Cover Letter</strong> on a job.
+              </p>
               <textarea
-                value={myResume}
-                onChange={e => { setMyResume(e.target.value); setResumeSaved(false); }}
-                placeholder="Paste your full resume here..."
-                className="w-full h-52 p-3 border rounded text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
+                value={resumeDraft}
+                onChange={e => setResumeDraft(e.target.value)}
+                placeholder="Paste your full resume here — work experience, education, skills, achievements..."
+                className="w-full h-64 p-4 border border-gray-200 rounded-lg text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-300 bg-gray-50 leading-relaxed"
               />
-              <button
-                onClick={handleSaveResume}
-                disabled={!myResume}
-                className="mt-2 bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-900 text-sm disabled:opacity-40"
-              >
-                Save Resume Locally
-              </button>
+              <div className="flex items-center justify-between mt-3">
+                <span className="text-xs text-gray-400">
+                  {resumeDraft.trim() ? `${resumeDraft.trim().split(/\s+/).length} words` : 'Empty'}
+                  {resumeDraft !== myResume && <span className="ml-2 text-amber-500">· Unsaved changes</span>}
+                </span>
+                <button
+                  onClick={handleSaveResume}
+                  disabled={resumeSaving || !resumeDraft.trim() || resumeDraft === myResume}
+                  className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-40 transition-colors"
+                >
+                  {resumeSaving ? 'Saving...' : 'Save Resume'}
+                </button>
+              </div>
             </div>
           )}
         </div>
