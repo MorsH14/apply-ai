@@ -18,28 +18,53 @@ export async function POST(request: Request) {
       model: "llama-3.3-70b-versatile",
       messages: [
         {
+          role: "system",
+          content: `You are an expert career coach and professional writer who crafts cover letters that consistently get callbacks. You write with confidence, specificity, and zero filler. You understand what hiring managers in 2025 actually want to read.`,
+        },
+        {
           role: "user",
-          content: `Write a compelling, personalized cover letter for this job application.
+          content: `Write a high-impact, personalized cover letter for this application.
 
-Job: ${position} at ${company}
+ROLE: ${position} at ${company}
 
-Job Description:
+JOB DESCRIPTION:
 ${jobDescription}
 
-My Background (from resume):
+CANDIDATE'S RESUME:
 ${resume}
 
-Instructions:
-- Professional but personable tone
-- 3-4 short paragraphs
-- Connect my specific experience to their specific needs
-- Show genuine enthusiasm for the role and company
-- Strong opening hook — do NOT start with "I am writing to apply..."
-- End with a confident call to action
-- Return ONLY the cover letter, no subject line or commentary`,
+STRUCTURE — follow this exactly:
+
+PARAGRAPH 1 — THE HOOK (2–3 sentences):
+- Open with a specific, compelling statement about why this role and this company
+- Lead with your strongest relevant achievement or value proposition — not your name, not "I am writing to apply"
+- Make the hiring manager feel you understand exactly what they need
+
+PARAGRAPH 2 — PROOF OF IMPACT (3–4 sentences):
+- Pick the 1–2 most relevant experiences from the resume that directly match the job description
+- Be specific: include real numbers, outcomes, or scope from the resume (e.g. "reduced deployment time by 40%")
+- Connect your past results to the future results you'll deliver for them
+
+PARAGRAPH 3 — WHY THIS COMPANY (2–3 sentences):
+- Show you've read the job description carefully — reference something specific about the role or team
+- Explain why this specific company/role is the right next step for you
+- Avoid generic lines like "I am passionate about your mission" — be concrete
+
+PARAGRAPH 4 — CLOSING (2 sentences):
+- Confident, not desperate — express clear interest in next steps
+- End with a proactive statement (e.g. "I'd welcome the chance to discuss how I can contribute to [specific team/goal]")
+
+TONE AND STYLE RULES:
+- Professional but human — write like a smart, confident person, not a robot
+- No clichés: do not use "team player", "go-getter", "passionate", "leverage", "synergy"
+- No throat-clearing openers: never start with "I am writing to apply", "My name is", or "I have always been interested in"
+- Every sentence must earn its place — if it doesn't add value, cut it
+- Target 250–350 words total
+
+Return ONLY the cover letter body text. No subject line, no "Dear Hiring Manager" header, no commentary.`,
         },
       ],
-      max_tokens: 1024,
+      max_tokens: 1500,
     });
 
     const text = completion.choices[0].message.content ?? "";
