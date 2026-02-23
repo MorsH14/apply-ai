@@ -64,6 +64,10 @@ export default function Home() {
   const [resumeSaving, setResumeSaving] = useState(false);
   const [resumeSavedAt, setResumeSavedAt] = useState<Date | null>(null);
   const [showResumePanel, setShowResumePanel] = useState(false);
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
   const [aiOpenId, setAiOpenId] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState<'tailor' | 'cover' | null>(null);
@@ -92,6 +96,11 @@ export default function Home() {
   }, {} as Record<string, number>);
 
   // --- Resume ---
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
   const handleSaveResume = async () => {
     setResumeSaving(true);
     await fetch('/api/resume', {
@@ -102,6 +111,38 @@ export default function Home() {
     setMyResume(resumeDraft);
     setResumeSavedAt(new Date());
     setResumeSaving(false);
+    setShowResumePanel(false);
+    showToast('Resume saved successfully');
+  };
+
+  const handleResumeFile = async (file: File) => {
+    setUploadError(null);
+    const allowed = ['.pdf', '.docx', '.txt'];
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+    if (!allowed.includes(ext)) {
+      setUploadError('Unsupported file. Please upload a PDF, DOCX, or TXT file.');
+      return;
+    }
+    setUploadingResume(true);
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const res = await fetch('/api/resume/upload', { method: 'POST', body: form });
+      const data = await res.json();
+      if (!res.ok) { setUploadError(data.error || 'Upload failed.'); return; }
+      setResumeDraft(data.text);
+    } catch {
+      setUploadError('Network error — please try again.');
+    } finally {
+      setUploadingResume(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleResumeFile(file);
   };
 
   // --- Add ---
@@ -241,6 +282,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg animate-fade-in">
+          <span className="text-green-400">✓</span> {toast}
+        </div>
+      )}
       <div className="max-w-5xl mx-auto px-4 py-6 sm:px-6">
 
         {/* Header */}
@@ -314,17 +361,63 @@ export default function Home() {
           </button>
 
           {showResumePanel && (
-            <div className="border-t px-5 py-5">
-              <p className="text-sm text-gray-500 mb-4 leading-relaxed">
-                Paste your master resume below. It is stored securely with your account and is only used when you click <strong>Tailor My Resume</strong> or <strong>Write Cover Letter</strong> on a job.
+            <div className="border-t px-5 py-5 space-y-4">
+              <p className="text-sm text-gray-500 leading-relaxed">
+                Upload your resume file <strong>(PDF, DOCX, or TXT)</strong> or paste it as text below. It is stored securely with your account and only used by AI tools.
               </p>
+
+              {/* Drop zone */}
+              <div
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+                className={`relative flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl px-6 py-8 transition-colors cursor-pointer
+                  ${dragOver ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50/40'}`}
+                onClick={() => document.getElementById('resume-file-input')?.click()}
+              >
+                <input
+                  id="resume-file-input"
+                  type="file"
+                  accept=".pdf,.docx,.txt"
+                  className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleResumeFile(f); e.target.value = ''; }}
+                />
+                {uploadingResume ? (
+                  <>
+                    <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-sm text-blue-600 font-medium">Extracting text from file…</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-3xl">📂</div>
+                    <p className="text-sm font-medium text-gray-700">
+                      {dragOver ? 'Drop to upload' : 'Drag & drop your resume here'}
+                    </p>
+                    <p className="text-xs text-gray-400">or click to browse — PDF, DOCX, TXT supported</p>
+                  </>
+                )}
+              </div>
+
+              {uploadError && (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{uploadError}</p>
+              )}
+
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-gray-200" />
+                <span className="text-xs text-gray-400 font-medium">or paste as text</span>
+                <div className="flex-1 h-px bg-gray-200" />
+              </div>
+
+              {/* Text area */}
               <textarea
                 value={resumeDraft}
                 onChange={e => setResumeDraft(e.target.value)}
-                placeholder="Paste your full resume here — work experience, education, skills, achievements..."
-                className="w-full h-64 p-4 border border-gray-200 rounded-lg text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-300 bg-gray-50 leading-relaxed"
+                placeholder="Paste your full resume here — work experience, education, skills, achievements…"
+                className="w-full h-56 p-4 border border-gray-200 rounded-lg text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-300 bg-gray-50 leading-relaxed"
               />
-              <div className="flex items-center justify-between mt-3">
+
+              <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-400">
                   {resumeDraft.trim() ? `${resumeDraft.trim().split(/\s+/).length} words` : 'Empty'}
                   {resumeDraft !== myResume && <span className="ml-2 text-amber-500">· Unsaved changes</span>}
@@ -334,7 +427,7 @@ export default function Home() {
                   disabled={resumeSaving || !resumeDraft.trim() || resumeDraft === myResume}
                   className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-40 transition-colors"
                 >
-                  {resumeSaving ? 'Saving...' : 'Save Resume'}
+                  {resumeSaving ? 'Saving…' : 'Save Resume'}
                 </button>
               </div>
             </div>
