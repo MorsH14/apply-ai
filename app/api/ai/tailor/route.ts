@@ -33,34 +33,55 @@ ${jobDescription}
 CANDIDATE'S CURRENT RESUME:
 ${resume}
 
-REWRITING RULES — follow every one of these:
+OUTPUT FORMAT — You MUST follow this exact structure. Every line must appear exactly as shown:
 
-ATS COMPLIANCE:
-- Use plain text only — no tables, no columns, no graphics, no text boxes
-- Mirror exact keywords and phrases from the job description (ATS matches literal strings)
-- Use standard section headers: PROFESSIONAL SUMMARY, WORK EXPERIENCE, SKILLS, EDUCATION
-- Spell out acronyms at least once (e.g. "Search Engine Optimization (SEO)")
+Line 1: The candidate's full name (extracted from the resume — do not fabricate)
+Line 2: Contact line in this format: email | phone | City, Country | LinkedIn URL (include only what exists in the resume)
+Line 3: Empty line
 
-PROFESSIONAL SUMMARY (3–4 lines at the top):
-- Write a targeted summary that directly speaks to this specific role
-- Include the job title, years of experience, and 2–3 of the most critical skills from the JD
-- Never write "I" — write in third-person implied (e.g. "Results-driven software engineer with 5 years…")
+Then output the resume body using ONLY these exact section headers (ALL CAPS):
 
-WORK EXPERIENCE:
-- Start every bullet with a strong past-tense action verb (Engineered, Spearheaded, Reduced, Increased, Delivered, Automated, etc.)
-- Quantify impact wherever numbers exist in the original (%, $, time saved, team size, scale)
-- For each role, lead with the 1–2 bullets most relevant to the target job
-- Remove bullets that are irrelevant to this specific role — ruthlessly cut filler
-- Do NOT invent achievements — only reframe and reorder real content
+PROFESSIONAL SUMMARY
+WORK EXPERIENCE
+SKILLS
+EDUCATION
 
-SKILLS SECTION:
-- List only skills that appear in or are closely related to the job description
-- Group into categories if there are many (e.g. Languages: … | Frameworks: … | Tools: …)
+And optionally if present in original:
+CERTIFICATIONS
+PROJECTS
+LANGUAGES
 
-OVERALL:
-- Keep it honest — never fabricate experience, titles, or dates
-- Every line must pass the "so what?" test — if it doesn't show value, cut it
-- Return ONLY the tailored resume text. No intro, no commentary, no "Here is your resume:"`,
+CONTENT RULES:
+
+PROFESSIONAL SUMMARY (3–4 sentences after the header):
+- Target this exact role and company
+- Open with job title + years of experience + top 2–3 matching skills
+- Never use "I" — third-person implied style
+- Mirror exact keywords from the job description
+
+WORK EXPERIENCE entries — use this format:
+Company Name | Job Title | Month Year – Month Year (or Present)
+• Bullet starting with strong action verb, quantified where possible
+• Bullet starting with strong action verb, quantified where possible
+(blank line between roles)
+
+Action verbs to use: Engineered, Spearheaded, Reduced, Increased, Delivered, Automated, Launched, Redesigned, Negotiated, Optimized, Built, Led, Drove, Managed, Implemented
+
+SKILLS — group into labelled categories:
+Category: skill, skill, skill
+Category: skill, skill, skill
+
+EDUCATION entries — use this format:
+Institution Name | Degree, Field | Year
+
+STRICT RULES:
+- Never fabricate names, dates, companies, metrics, or credentials
+- Only reframe and reorder real content from the resume
+- Mirror exact keyword phrases from the job description (ATS literal string matching)
+- No tables, no columns, no graphics — plain text only
+- Spell out acronyms at least once
+- Every bullet must pass the "so what?" test — if it shows no value, cut it
+- Return ONLY the formatted resume. Zero commentary, no "Here is your resume:", no preamble.`,
         },
       ],
       max_tokens: 4096,

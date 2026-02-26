@@ -242,37 +242,245 @@ export default function Home() {
     const { jsPDF } = await import('jspdf');
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
-    const margin = 20;
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const maxWidth = pageWidth - margin * 2;
-    const lineHeight = 6.5;
-    let y = margin;
+    const ML = 18;          // margin left
+    const MR = 18;          // margin right
+    const MT = 20;          // margin top
+    const MB = 18;          // margin bottom
+    const PW = doc.internal.pageSize.getWidth();
+    const PH = doc.internal.pageSize.getHeight();
+    const TW = PW - ML - MR; // text width
 
-    // Title
-    doc.setFontSize(13);
-    doc.setFont('helvetica', 'bold');
-    const title = type === 'tailor'
-      ? `Tailored Resume — ${position} at ${company}`
-      : `Cover Letter — ${position} at ${company}`;
-    const titleLines = doc.splitTextToSize(title, maxWidth);
-    doc.text(titleLines, margin, y);
-    y += titleLines.length * lineHeight + 4;
+    // Colors
+    const NAVY  = [15, 40, 100] as [number, number, number];
+    const GRAY  = [100, 100, 100] as [number, number, number];
+    const BLACK = [30, 30, 30] as [number, number, number];
+    const RULE  = [200, 210, 230] as [number, number, number];
 
-    // Divider
-    doc.setDrawColor(180);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += lineHeight;
+    let y = MT;
 
-    // Body
-    doc.setFontSize(10.5);
-    doc.setFont('helvetica', 'normal');
-    for (const line of content.split('\n')) {
-      const wrapped = doc.splitTextToSize(line || ' ', maxWidth);
+    const newPage = () => { doc.addPage(); y = MT; };
+    const checkY = (needed = 7) => { if (y + needed > PH - MB) newPage(); };
+
+    const lines = content.split('\n');
+    let lineIdx = 0;
+
+    // ── Extract header (first 2 non-empty lines = name + contact) ──
+    const nonEmpty = lines.map((l, i) => ({ t: l.trim(), i })).filter(x => x.t);
+    const nameLine    = nonEmpty[0]?.t ?? '';
+    const contactLine = nonEmpty[1]?.t ?? '';
+
+    // Skip past those two lines in the main loop
+    const headerEndIdx = nonEmpty[1]?.i ?? 0;
+    lineIdx = headerEndIdx + 1;
+
+    // ── SECTION HEADERS recognised by the renderer ──
+    const RESUME_SECTIONS = new Set([
+      'PROFESSIONAL SUMMARY','WORK EXPERIENCE','SKILLS','EDUCATION',
+      'CERTIFICATIONS','PROJECTS','LANGUAGES','AWARDS','VOLUNTEER',
+    ]);
+
+    // ── Helper: draw text, auto-wrap, auto-paginate ──
+    const drawText = (
+      text: string,
+      x: number,
+      fontSize: number,
+      style: 'normal' | 'bold' | 'italic',
+      color: [number,number,number],
+      maxW: number,
+      gap = 5.5
+    ) => {
+      doc.setFontSize(fontSize);
+      doc.setFont('helvetica', style);
+      doc.setTextColor(...color);
+      const wrapped = doc.splitTextToSize(text, maxW);
       for (const wl of wrapped) {
-        if (y > pageHeight - margin) { doc.addPage(); y = margin; }
-        doc.text(wl, margin, y);
-        y += lineHeight;
+        checkY(gap);
+        doc.text(wl, x, y);
+        y += gap;
+      }
+    };
+
+    const drawRule = (color: [number,number,number], thickness = 0.3) => {
+      doc.setDrawColor(...color);
+      doc.setLineWidth(thickness);
+      doc.line(ML, y, PW - MR, y);
+      y += 3;
+    };
+
+    if (type === 'tailor') {
+      // ══════════════════════════════════════════
+      //  RESUME TEMPLATE
+      // ══════════════════════════════════════════
+
+      // Name
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...NAVY);
+      doc.text(nameLine || 'Your Name', ML, y);
+      y += 8;
+
+      // Contact line
+      if (contactLine) {
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...GRAY);
+        doc.text(doc.splitTextToSize(contactLine, TW), ML, y);
+        y += 5;
+      }
+
+      // Full-width accent rule
+      doc.setDrawColor(...NAVY);
+      doc.setLineWidth(0.8);
+      doc.line(ML, y, PW - MR, y);
+      y += 7;
+
+      // Body lines
+      while (lineIdx < lines.length) {
+        const raw = lines[lineIdx];
+        const trimmed = raw.trim();
+        lineIdx++;
+
+        if (!trimmed) { y += 2.5; continue; }
+
+        // Section header?
+        if (RESUME_SECTIONS.has(trimmed.toUpperCase())) {
+          y += 2;
+          checkY(10);
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(...NAVY);
+          doc.text(trimmed.toUpperCase(), ML, y);
+          y += 4;
+          drawRule(RULE, 0.4);
+          continue;
+        }
+
+        // Role/company line (contains " | " — job entry header)
+        if (trimmed.includes(' | ') && !trimmed.startsWith('•') && !trimmed.startsWith('-')) {
+          checkY(7);
+          const parts = trimmed.split(' | ');
+          // Bold first part (company or institution)
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(...BLACK);
+          const firstW = doc.getTextWidth(parts[0] + ' | ');
+          doc.text(parts[0], ML, y);
+          // Normal rest
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(...GRAY);
+          doc.text('| ' + parts.slice(1).join(' | '), ML + firstW, y);
+          y += 5.5;
+          continue;
+        }
+
+        // Bullet point
+        if (trimmed.startsWith('•') || trimmed.startsWith('-')) {
+          const bullet = '•  ' + trimmed.replace(/^[•\-]\s*/, '');
+          drawText(bullet, ML + 3, 9.5, 'normal', BLACK, TW - 3, 5);
+          continue;
+        }
+
+        // Skills category line (e.g. "Languages: Python, JavaScript")
+        if (/^[A-Za-z &\/]+:\s/.test(trimmed)) {
+          checkY(6);
+          const colon = trimmed.indexOf(':');
+          const label = trimmed.slice(0, colon + 1);
+          const value = trimmed.slice(colon + 1).trim();
+          doc.setFontSize(9.5);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(...BLACK);
+          const lw = doc.getTextWidth(label + ' ');
+          doc.text(label, ML, y);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(...GRAY);
+          const wrapped = doc.splitTextToSize(value, TW - lw);
+          doc.text(wrapped[0], ML + lw, y);
+          y += 5;
+          for (let wi = 1; wi < wrapped.length; wi++) {
+            checkY(5);
+            doc.text(wrapped[wi], ML, y);
+            y += 5;
+          }
+          continue;
+        }
+
+        // Plain paragraph text
+        drawText(trimmed, ML, 9.5, 'normal', BLACK, TW, 5);
+      }
+
+    } else {
+      // ══════════════════════════════════════════
+      //  COVER LETTER TEMPLATE
+      // ══════════════════════════════════════════
+
+      // Sender name (top right feel — but left-aligned per ATS)
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...NAVY);
+      doc.text(nameLine || 'Your Name', ML, y);
+      y += 7;
+
+      if (contactLine) {
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...GRAY);
+        doc.text(doc.splitTextToSize(contactLine, TW), ML, y);
+        y += 5;
+      }
+
+      doc.setDrawColor(...NAVY);
+      doc.setLineWidth(0.8);
+      doc.line(ML, y, PW - MR, y);
+      y += 9;
+
+      // Rest of lines (date, company, greeting, body, sign-off)
+      while (lineIdx < lines.length) {
+        const raw = lines[lineIdx];
+        const trimmed = raw.trim();
+        lineIdx++;
+
+        if (!trimmed) { y += 3.5; continue; }
+
+        // Date line
+        if (/^(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}$/.test(trimmed)) {
+          drawText(trimmed, ML, 9.5, 'normal', GRAY, TW, 5.5);
+          continue;
+        }
+
+        // Greeting
+        if (trimmed.startsWith('Dear ')) {
+          drawText(trimmed, ML, 10, 'bold', BLACK, TW, 6);
+          y += 2;
+          continue;
+        }
+
+        // Sign-off
+        if (trimmed === 'Sincerely,' || trimmed === 'Sincerely' || trimmed === 'Best regards,' || trimmed === 'Regards,') {
+          y += 3;
+          drawText(trimmed, ML, 10, 'normal', BLACK, TW, 6);
+          continue;
+        }
+
+        // Recipient block lines (company name, "Hiring Manager")
+        if (trimmed === company || trimmed === 'Hiring Manager') {
+          drawText(trimmed, ML, 9.5, 'normal', GRAY, TW, 5.5);
+          continue;
+        }
+
+        // Body paragraph text
+        drawText(trimmed, ML, 10.5, 'normal', BLACK, TW, 6.5);
+      }
+    }
+
+    // ── Footer: page numbers ──
+    const totalPages = (doc.internal as unknown as { getNumberOfPages: () => number }).getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      doc.setPage(p);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...GRAY);
+      if (totalPages > 1) {
+        doc.text(`Page ${p} of ${totalPages}`, PW / 2, PH - 8, { align: 'center' });
       }
     }
 

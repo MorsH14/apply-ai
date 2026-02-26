@@ -33,35 +33,53 @@ ${jobDescription}
 CANDIDATE'S RESUME:
 ${resume}
 
-STRUCTURE — follow this exactly:
+OUTPUT FORMAT — follow this exact structure, every line as shown:
+
+Line 1: Candidate's full name (extracted from resume — do not fabricate)
+Line 2: Contact line: email | phone | City, Country (include only what exists in the resume)
+Line 3: Empty line
+Line 4: Today's date in this format: February 26, 2026
+Line 5: Empty line
+Line 6: Hiring Manager
+Line 7: ${company}
+Line 8: Empty line
+Line 9: Dear Hiring Manager,
+Line 10: Empty line
+
+Then write the body using this paragraph structure:
 
 PARAGRAPH 1 — THE HOOK (2–3 sentences):
-- Open with a specific, compelling statement about why this role and this company
-- Lead with your strongest relevant achievement or value proposition — not your name, not "I am writing to apply"
-- Make the hiring manager feel you understand exactly what they need
+- Lead with the candidate's strongest achievement or specific value proposition relevant to this role
+- Make the hiring manager immediately feel this person understands what they need
+- Never start with "I am writing to apply", "My name is", or "I have always been interested in"
 
 PARAGRAPH 2 — PROOF OF IMPACT (3–4 sentences):
-- Pick the 1–2 most relevant experiences from the resume that directly match the job description
-- Be specific: include real numbers, outcomes, or scope from the resume (e.g. "reduced deployment time by 40%")
-- Connect your past results to the future results you'll deliver for them
+- Cite 1–2 specific experiences from the resume that directly match the job description
+- Include real numbers, outcomes, or scope already in the resume (e.g. "reduced deployment time by 40%")
+- Bridge past results to future value for this specific company
 
 PARAGRAPH 3 — WHY THIS COMPANY (2–3 sentences):
-- Show you've read the job description carefully — reference something specific about the role or team
-- Explain why this specific company/role is the right next step for you
-- Avoid generic lines like "I am passionate about your mission" — be concrete
+- Reference something concrete and specific from the job description
+- Explain why this role is the clear next step — be specific, not generic
+- No lines like "I am passionate about your mission" — say what specifically draws you here
 
 PARAGRAPH 4 — CLOSING (2 sentences):
-- Confident, not desperate — express clear interest in next steps
-- End with a proactive statement (e.g. "I'd welcome the chance to discuss how I can contribute to [specific team/goal]")
+- Confident close, not desperate
+- End with a proactive call to action referencing the role or team
 
-TONE AND STYLE RULES:
-- Professional but human — write like a smart, confident person, not a robot
-- No clichés: do not use "team player", "go-getter", "passionate", "leverage", "synergy"
-- No throat-clearing openers: never start with "I am writing to apply", "My name is", or "I have always been interested in"
-- Every sentence must earn its place — if it doesn't add value, cut it
-- Target 250–350 words total
+Then after the body add:
+- Empty line
+- Sincerely,
+- Empty line
+- Candidate's full name
 
-Return ONLY the cover letter body text. No subject line, no "Dear Hiring Manager" header, no commentary.`,
+TONE AND STYLE:
+- Professional but human — confident, direct, never sycophantic
+- No clichés: banned words — "team player", "go-getter", "passionate", "leverage", "synergy", "results-driven"
+- Every sentence must earn its place
+- Target 280–350 words for the body only
+
+Return ONLY the formatted cover letter as described. No commentary, no "Here is your cover letter:", no extra text.`,
         },
       ],
       max_tokens: 1500,
