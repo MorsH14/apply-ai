@@ -15,7 +15,7 @@ function GenovaLogo({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   const text = size === "lg" ? "text-3xl" : size === "sm" ? "text-lg" : "text-2xl";
   return (
     <div className="flex items-center gap-3">
-      <div className={`${box} bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white font-bold shrink-0`}>
+      <div className={`${box} bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white font-bold shrink-0`}>
         G
       </div>
       <span className={`${text} font-bold tracking-tight`}>Genova</span>
@@ -63,7 +63,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex">
 
       {/* ── Left: Brand panel (desktop only) ── */}
-      <div className="hidden lg:flex lg:w-[55%] bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 flex-col justify-between p-14 relative overflow-hidden">
+      <div className="hidden lg:flex lg:w-[55%] bg-linear-to-br from-slate-900 via-blue-950 to-indigo-950 flex-col justify-between p-14 relative overflow-hidden">
 
         {/* Background glow */}
         <div className="absolute top-0 left-0 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
@@ -79,7 +79,7 @@ export default function LoginPage() {
           <div className="mt-20">
             <h1 className="text-5xl font-bold text-white leading-tight tracking-tight">
               Apply smarter.<br />
-              <span className="bg-gradient-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
+              <span className="bg-linear-to-r from-blue-400 to-violet-400 bg-clip-text text-transparent">
                 Land faster.
               </span>
             </h1>
@@ -184,7 +184,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-blue-600 to-violet-600 text-white py-2.5 rounded-xl hover:from-blue-700 hover:to-violet-700 font-semibold text-sm disabled:opacity-50 transition-all shadow-sm mt-2"
+              className="w-full bg-linear-to-r from-blue-600 to-violet-600 text-white py-2.5 rounded-xl hover:from-blue-700 hover:to-violet-700 font-semibold text-sm disabled:opacity-50 transition-all shadow-sm mt-2"
             >
               {loading
                 ? (mode === "login" ? "Signing in..." : "Creating account...")

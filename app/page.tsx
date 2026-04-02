@@ -3,8 +3,17 @@
 import { useState, useEffect } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import dynamic from 'next/dynamic';
+import type { FormEvent } from 'react';
+import {
+  Briefcase, FileText, Sparkles, Mail, Pencil, Trash2,
+  ChevronDown, ChevronUp, Copy, Download, X, LogOut,
+  Upload, Plus, Check, AlertCircle, MapPin, DollarSign,
+  CalendarDays,
+} from 'lucide-react';
 
 const TemplatePickerModal = dynamic(() => import('@/components/TemplatePickerModal'), { ssr: false });
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type Job = {
   _id: string;
@@ -38,28 +47,45 @@ type TemplateModalState = {
   position: string;
 } | null;
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const STATUSES = ['saved', 'applied', 'interview', 'offer', 'rejected'] as const;
 
-const STATUS_STYLE: Record<string, string> = {
-  saved:     'bg-blue-100 text-blue-800',
-  applied:   'bg-amber-100 text-amber-800',
-  interview: 'bg-purple-100 text-purple-800',
-  offer:     'bg-green-100 text-green-800',
-  rejected:  'bg-red-100 text-red-800',
+const STATUS_BADGE: Record<string, string> = {
+  saved:     'bg-sky-50 text-sky-700 border border-sky-200',
+  applied:   'bg-amber-50 text-amber-700 border border-amber-200',
+  interview: 'bg-violet-50 text-violet-700 border border-violet-200',
+  offer:     'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  rejected:  'bg-rose-50 text-rose-600 border border-rose-200',
 };
 
-const ANALYTICS_STYLE: Record<string, string> = {
-  saved:     'bg-blue-50 border-blue-200 text-blue-700',
-  applied:   'bg-amber-50 border-amber-200 text-amber-700',
-  interview: 'bg-purple-50 border-purple-200 text-purple-700',
-  offer:     'bg-green-50 border-green-200 text-green-700',
-  rejected:  'bg-red-50 border-red-200 text-red-700',
+const ANALYTICS_NUM: Record<string, string> = {
+  saved:     'text-sky-600',
+  applied:   'text-amber-500',
+  interview: 'text-violet-600',
+  offer:     'text-emerald-600',
+  rejected:  'text-rose-500',
+};
+
+const ANALYTICS_DOT: Record<string, string> = {
+  saved:     'bg-sky-400',
+  applied:   'bg-amber-400',
+  interview: 'bg-violet-400',
+  offer:     'bg-emerald-400',
+  rejected:  'bg-rose-400',
 };
 
 const EMPTY_FORM: FormState = {
   company: '', position: '', status: 'saved',
   location: '', salary: '', jobDescription: '', notes: '',
 };
+
+// ─── Shared input / label styles ──────────────────────────────────────────────
+
+const INPUT = 'w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors';
+const LABEL = 'block text-xs font-medium text-slate-600 mb-1.5';
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Home() {
   const { data: session } = useSession();
@@ -87,12 +113,10 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [templateModal, setTemplateModal] = useState<TemplateModalState>(null);
 
-  // Load jobs
   useEffect(() => {
     fetch('/api/jobs').then(r => r.json()).then(setJobs);
   }, []);
 
-  // Load resume from account
   useEffect(() => {
     fetch('/api/resume')
       .then(r => r.json())
@@ -101,13 +125,11 @@ export default function Home() {
       });
   }, []);
 
-  // Analytics counts
   const counts = STATUSES.reduce((acc, s) => {
     acc[s] = jobs.filter(j => j.status === s).length;
     return acc;
   }, {} as Record<string, number>);
 
-  // --- Resume ---
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
@@ -157,7 +179,6 @@ export default function Home() {
     if (file) handleResumeFile(file);
   };
 
-  // --- Add ---
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     const res = await fetch('/api/jobs', {
@@ -171,17 +192,12 @@ export default function Home() {
     setShowAddForm(false);
   };
 
-  // --- Edit ---
   const startEdit = (job: Job) => {
     setEditingId(job._id);
     setEditState({
-      company: job.company,
-      position: job.position,
-      status: job.status,
-      location: job.location || '',
-      salary: job.salary || '',
-      jobDescription: job.jobDescription || '',
-      notes: job.notes || '',
+      company: job.company, position: job.position, status: job.status,
+      location: job.location || '', salary: job.salary || '',
+      jobDescription: job.jobDescription || '', notes: job.notes || '',
     });
   };
 
@@ -198,7 +214,6 @@ export default function Home() {
     }
   };
 
-  // --- Delete ---
   const deleteJob = async (id: string) => {
     const res = await fetch(`/api/jobs/${id}`, { method: 'DELETE' });
     if (res.ok) setJobs(jobs.filter(j => j._id !== id));
@@ -210,7 +225,6 @@ export default function Home() {
     setJobs([]);
   };
 
-  // --- AI ---
   const openAiPanel = (jobId: string) => {
     const newId = aiOpenId === jobId ? null : jobId;
     setAiOpenId(newId);
@@ -222,25 +236,15 @@ export default function Home() {
     setAiLoading(type);
     setAiOutput(null);
     setAiError(null);
-
     const endpoint = type === 'tailor' ? '/api/ai/tailor' : '/api/ai/cover-letter';
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jobDescription: job.jobDescription,
-        resume: myResume,
-        company: job.company,
-        position: job.position,
-      }),
+      body: JSON.stringify({ jobDescription: job.jobDescription, resume: myResume, company: job.company, position: job.position }),
     });
-
     const data = await res.json();
-    if (!res.ok) {
-      setAiError(data.error || 'Something went wrong');
-    } else {
-      setAiOutput({ type, content: data.result });
-    }
+    if (!res.ok) setAiError(data.error || 'Something went wrong');
+    else setAiOutput({ type, content: data.result });
     setAiLoading(null);
   };
 
@@ -251,16 +255,14 @@ export default function Home() {
   };
 
   const openTemplatePicker = (content: string, type: 'tailor' | 'cover', company: string, position: string) => {
-    setTemplateModal({
-      content,
-      type: type === 'tailor' ? 'resume' : 'cover',
-      company,
-      position,
-    });
+    setTemplateModal({ content, type: type === 'tailor' ? 'resume' : 'cover', company, position });
   };
 
+  // ─── Render ───────────────────────────────────────────────────────────────
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50">
+
       {/* Template picker modal */}
       {templateModal && (
         <TemplatePickerModal
@@ -274,86 +276,99 @@ export default function Home() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-xl shadow-lg animate-fade-in">
-          <span className="text-green-400">✓</span> {toast}
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-slate-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-xl border border-white/10 animate-fade-in">
+          <Check size={14} className="text-emerald-400 shrink-0" />
+          {toast}
         </div>
       )}
-      <div className="max-w-5xl mx-auto px-4 py-6 sm:px-6">
 
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 mb-6">
-          {/* Genova logo */}
+      {/* ── Sticky Header ─────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+
+          {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white font-bold text-lg shrink-0 shadow-sm">
+            <div className="w-8 h-8 rounded-xl bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-sm">
               G
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900 leading-none">Genova</h1>
-              <p className="text-xs text-gray-400 mt-0.5">{jobs.length} application{jobs.length !== 1 ? 's' : ''} tracked</p>
+            <div className="leading-none">
+              <span className="text-[15px] font-bold text-slate-900 tracking-tight">Genova</span>
+              <span className="hidden sm:inline text-xs text-slate-400 ml-2">
+                {jobs.length} application{jobs.length !== 1 ? 's' : ''}
+              </span>
             </div>
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2">
             {session?.user?.name && (
-              <span className="hidden sm:flex items-center gap-1.5 text-sm text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
-                <span className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white text-xs font-bold">
+              <div className="hidden sm:flex items-center gap-2 text-sm text-slate-600 bg-slate-100 pl-2 pr-3 py-1.5 rounded-xl">
+                <div className="w-5 h-5 rounded-full bg-linear-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white text-[10px] font-bold">
                   {session.user.name[0].toUpperCase()}
-                </span>
-                {session.user.name}
-              </span>
+                </div>
+                <span className="font-medium">{session.user.name}</span>
+              </div>
             )}
             <button
               onClick={() => { setShowAddForm(!showAddForm); setEditingId(null); }}
-              className="bg-gradient-to-r from-blue-600 to-violet-600 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-violet-700 font-medium text-sm shadow-sm"
+              className="flex items-center gap-1.5 bg-linear-to-r from-blue-600 to-violet-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-violet-700 transition-all shadow-sm shadow-blue-500/20"
             >
-              + Add Job
+              <Plus size={15} strokeWidth={2.5} />
+              Add Job
             </button>
             <button
               onClick={() => signOut({ callbackUrl: '/login' })}
-              className="bg-gray-100 text-gray-500 px-3 py-2 rounded-lg hover:bg-gray-200 text-sm font-medium"
+              title="Sign out"
+              className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 transition-colors"
             >
-              Sign out
+              <LogOut size={15} />
             </button>
           </div>
         </div>
+      </header>
 
-        {/* Analytics Bar */}
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 sm:gap-3 mb-6">
+      {/* ── Page body ──────────────────────────────────────────────────── */}
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+
+        {/* ── Analytics ─────────────────────────────────────────────── */}
+        <div className="grid grid-cols-5 gap-3">
           {STATUSES.map(status => (
-            <div key={status} className={`border rounded-lg p-2 sm:p-3 text-center ${ANALYTICS_STYLE[status]}`}>
-              <div className="text-xl sm:text-2xl font-bold">{counts[status]}</div>
-              <div className="text-xs capitalize font-medium mt-0.5">{status}</div>
+            <div key={status} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm text-center flex flex-col items-center gap-1">
+              <div className={`w-1.5 h-1.5 rounded-full ${ANALYTICS_DOT[status]}`} />
+              <div className={`text-2xl font-bold tracking-tight ${ANALYTICS_NUM[status]}`}>{counts[status]}</div>
+              <div className="text-[11px] text-slate-500 capitalize font-medium">{status}</div>
             </div>
           ))}
         </div>
 
-        {/* My Resume Panel */}
-        <div className="mb-6 border rounded-xl bg-white shadow-sm overflow-hidden">
+        {/* ── Resume Panel ──────────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <button
             onClick={() => setShowResumePanel(!showResumePanel)}
-            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 transition-colors"
+            className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-50/60 transition-colors group"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 text-base">
-                📄
+            <div className="flex items-center gap-3.5">
+              <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+                <FileText size={17} />
               </div>
               <div>
-                <p className="font-semibold text-gray-900 text-sm">My Resume</p>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="font-semibold text-slate-900 text-sm">My Resume</p>
+                <p className="text-xs text-slate-400 mt-0.5">
                   {myResume
-                    ? `${myResume.trim().split(/\s+/).length} words · ${resumeSavedAt ? `Saved ${resumeSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Saved'}`
+                    ? `${myResume.trim().split(/\s+/).length} words · ${resumeSavedAt ? `Last saved ${resumeSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Saved'}`
                     : 'Not added yet — required for AI tools'}
                 </p>
               </div>
             </div>
-            <span className="text-gray-400 text-xs font-medium">{showResumePanel ? '▲ Collapse' : '▼ Edit'}</span>
+            <span className="text-slate-400 group-hover:text-slate-600 transition-colors">
+              {showResumePanel ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </span>
           </button>
 
           {showResumePanel && (
-            <div className="border-t px-5 py-5 space-y-4">
-              <p className="text-sm text-gray-500 leading-relaxed">
-                Upload your resume file <strong>(PDF, DOCX, or TXT)</strong> or paste it as text below. It is stored securely with your account and only used by AI tools.
+            <div className="border-t border-slate-100 px-5 py-5 space-y-4">
+              <p className="text-sm text-slate-500 leading-relaxed">
+                Upload your resume <span className="font-medium text-slate-700">(PDF, DOCX, or TXT)</span> or paste it as plain text. It's stored securely and only used by AI tools.
               </p>
 
               {/* Drop zone */}
@@ -361,9 +376,9 @@ export default function Home() {
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={handleDrop}
-                className={`relative flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl px-6 py-8 transition-colors cursor-pointer
-                  ${dragOver ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50/40'}`}
                 onClick={() => document.getElementById('resume-file-input')?.click()}
+                className={`relative flex flex-col items-center justify-center gap-2.5 border-2 border-dashed rounded-xl px-6 py-8 transition-all cursor-pointer
+                  ${dragOver ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-slate-50/60 hover:border-blue-300 hover:bg-blue-50/40'}`}
               >
                 <input
                   id="resume-file-input"
@@ -373,158 +388,191 @@ export default function Home() {
                   onChange={e => { const f = e.target.files?.[0]; if (f) handleResumeFile(f); e.target.value = ''; }}
                 />
                 {uploadingResume ? (
-                  <>
-                    <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm text-blue-600 font-medium">Extracting text from file…</p>
-                  </>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-sm text-blue-600 font-medium">Extracting text…</p>
+                  </div>
                 ) : (
                   <>
-                    <div className="text-3xl">📂</div>
-                    <p className="text-sm font-medium text-gray-700">
-                      {dragOver ? 'Drop to upload' : 'Drag & drop your resume here'}
+                    <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 shadow-sm">
+                      <Upload size={18} />
+                    </div>
+                    <p className="text-sm font-medium text-slate-700">
+                      {dragOver ? 'Drop to upload' : 'Drag & drop your resume'}
                     </p>
-                    <p className="text-xs text-gray-400">or click to browse — PDF, DOCX, TXT supported</p>
+                    <p className="text-xs text-slate-400">or click to browse — PDF, DOCX, TXT</p>
                   </>
                 )}
               </div>
 
               {uploadError && (
-                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{uploadError}</p>
+                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5">
+                  <AlertCircle size={14} className="shrink-0" />
+                  {uploadError}
+                </div>
               )}
 
-              {/* Divider */}
               <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-gray-200" />
-                <span className="text-xs text-gray-400 font-medium">or paste as text</span>
-                <div className="flex-1 h-px bg-gray-200" />
+                <div className="flex-1 h-px bg-slate-200" />
+                <span className="text-xs text-slate-400 font-medium">or paste as text</span>
+                <div className="flex-1 h-px bg-slate-200" />
               </div>
 
-              {/* Text area */}
               <textarea
                 value={resumeDraft}
                 onChange={e => setResumeDraft(e.target.value)}
                 placeholder="Paste your full resume here — work experience, education, skills, achievements…"
-                className="w-full h-56 p-4 border border-gray-200 rounded-lg text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-blue-300 bg-gray-50 leading-relaxed"
+                className="w-full h-52 p-4 border border-slate-200 rounded-xl text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-slate-50/60 leading-relaxed text-slate-800 placeholder:text-slate-400 transition-colors"
               />
 
               <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-slate-400">
                   {resumeDraft.trim() ? `${resumeDraft.trim().split(/\s+/).length} words` : 'Empty'}
-                  {resumeDraft !== myResume && <span className="ml-2 text-amber-500">· Unsaved changes</span>}
+                  {resumeDraft !== myResume && <span className="ml-2 text-amber-500 font-medium">· Unsaved changes</span>}
                 </span>
                 <button
                   onClick={handleSaveResume}
                   disabled={resumeSaving || !resumeDraft.trim() || resumeDraft === myResume}
-                  className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-40 transition-colors"
+                  className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2 rounded-xl hover:bg-blue-700 text-sm font-semibold disabled:opacity-40 transition-colors"
                 >
-                  {resumeSaving ? 'Saving…' : 'Save Resume'}
+                  {resumeSaving ? (
+                    <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Saving…</>
+                  ) : (
+                    <><Check size={14} />Save Resume</>
+                  )}
                 </button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Add Job Form */}
+        {/* ── Add Job Form ──────────────────────────────────────────── */}
         {showAddForm && (
-          <form onSubmit={handleAdd} className="mb-6 p-4 sm:p-6 border rounded-lg bg-white shadow-sm">
-            <h2 className="text-lg font-semibold mb-4 text-gray-800">Add New Job</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-              <input
-                placeholder="Company *" required value={addState.company}
-                onChange={e => setAddState({ ...addState, company: e.target.value })}
-                className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
-              />
-              <input
-                placeholder="Position *" required value={addState.position}
-                onChange={e => setAddState({ ...addState, position: e.target.value })}
-                className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
-              />
-              <input
-                placeholder="Location" value={addState.location}
-                onChange={e => setAddState({ ...addState, location: e.target.value })}
-                className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
-              />
-              <input
-                placeholder="Salary / Range" value={addState.salary}
-                onChange={e => setAddState({ ...addState, salary: e.target.value })}
-                className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
-              />
-            </div>
-            <textarea
-              placeholder="Job Description — paste here to unlock AI tailoring"
-              value={addState.jobDescription}
-              onChange={e => setAddState({ ...addState, jobDescription: e.target.value })}
-              className="w-full p-2 border rounded mb-3 h-28 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
-            />
-            <textarea
-              placeholder="Notes (optional)"
-              value={addState.notes}
-              onChange={e => setAddState({ ...addState, notes: e.target.value })}
-              className="w-full p-2 border rounded mb-4 h-16 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
-            />
-            <div className="flex gap-2">
-              <button type="submit" className="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700 text-sm font-medium">
-                Add Job
-              </button>
-              <button type="button" onClick={() => setShowAddForm(false)} className="bg-gray-100 text-gray-700 px-5 py-2 rounded hover:bg-gray-200 text-sm">
-                Cancel
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                  <Briefcase size={14} />
+                </div>
+                <h2 className="font-semibold text-slate-900 text-sm">Add New Job</h2>
+              </div>
+              <button onClick={() => setShowAddForm(false)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+                <X size={15} />
               </button>
             </div>
-          </form>
+            <form onSubmit={handleAdd} className="p-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className={LABEL}>Company <span className="text-rose-400">*</span></label>
+                  <input placeholder="e.g. Stripe" required value={addState.company}
+                    onChange={e => setAddState({ ...addState, company: e.target.value })}
+                    className={INPUT} />
+                </div>
+                <div>
+                  <label className={LABEL}>Position <span className="text-rose-400">*</span></label>
+                  <input placeholder="e.g. Senior Engineer" required value={addState.position}
+                    onChange={e => setAddState({ ...addState, position: e.target.value })}
+                    className={INPUT} />
+                </div>
+                <div>
+                  <label className={LABEL}>Location</label>
+                  <input placeholder="e.g. Remote / New York" value={addState.location}
+                    onChange={e => setAddState({ ...addState, location: e.target.value })}
+                    className={INPUT} />
+                </div>
+                <div>
+                  <label className={LABEL}>Salary / Range</label>
+                  <input placeholder="e.g. $120k – $150k" value={addState.salary}
+                    onChange={e => setAddState({ ...addState, salary: e.target.value })}
+                    className={INPUT} />
+                </div>
+              </div>
+              <div>
+                <label className={LABEL}>
+                  Job Description
+                  <span className="ml-1.5 text-slate-400 font-normal">— paste here to unlock AI tailoring</span>
+                </label>
+                <textarea
+                  placeholder="Paste the full job description…"
+                  value={addState.jobDescription}
+                  onChange={e => setAddState({ ...addState, jobDescription: e.target.value })}
+                  className={`${INPUT} h-28 resize-none`}
+                />
+              </div>
+              <div>
+                <label className={LABEL}>Notes <span className="text-slate-400 font-normal">(optional)</span></label>
+                <textarea
+                  placeholder="Referral contact, interview notes, deadlines…"
+                  value={addState.notes}
+                  onChange={e => setAddState({ ...addState, notes: e.target.value })}
+                  className={`${INPUT} h-16 resize-none`}
+                />
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <button type="submit" className="flex items-center gap-2 bg-linear-to-r from-blue-600 to-violet-600 text-white px-5 py-2.5 rounded-xl hover:from-blue-700 hover:to-violet-700 text-sm font-semibold transition-all shadow-sm shadow-blue-500/20">
+                  <Plus size={14} strokeWidth={2.5} />Add Job
+                </button>
+                <button type="button" onClick={() => setShowAddForm(false)} className="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 text-sm font-medium transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
         )}
 
-        {/* Job List */}
+        {/* ── Job List ──────────────────────────────────────────────── */}
         <div className="space-y-3">
           {jobs.map(job => (
-            <div key={job._id} className="border rounded-lg bg-white shadow-sm overflow-hidden">
+            <div key={job._id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition-shadow hover:shadow-md">
 
               {editingId === job._id ? (
                 /* ── Edit Mode ── */
-                <div className="p-4 sm:p-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                    <input
-                      value={editState.company} placeholder="Company"
-                      onChange={e => setEditState({ ...editState, company: e.target.value })}
-                      className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
-                    <input
-                      value={editState.position} placeholder="Position"
-                      onChange={e => setEditState({ ...editState, position: e.target.value })}
-                      className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
-                    <input
-                      value={editState.location} placeholder="Location"
-                      onChange={e => setEditState({ ...editState, location: e.target.value })}
-                      className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
-                    <input
-                      value={editState.salary} placeholder="Salary / Range"
-                      onChange={e => setEditState({ ...editState, salary: e.target.value })}
-                      className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
-                    />
+                <div className="p-5 space-y-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Pencil size={13} className="text-slate-400" />
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Editing</span>
                   </div>
-                  <select
-                    value={editState.status}
-                    onChange={e => setEditState({ ...editState, status: e.target.value })}
-                    className="w-full p-2 border rounded mb-3 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  >
-                    {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <textarea
-                    value={editState.jobDescription} placeholder="Job Description"
-                    onChange={e => setEditState({ ...editState, jobDescription: e.target.value })}
-                    className="w-full p-2 border rounded mb-3 h-28 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  />
-                  <textarea
-                    value={editState.notes} placeholder="Notes"
-                    onChange={e => setEditState({ ...editState, notes: e.target.value })}
-                    className="w-full p-2 border rounded mb-4 h-16 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  />
-                  <div className="flex gap-2">
-                    <button onClick={() => saveEdit(job._id)} className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 text-sm font-medium">
-                      Save
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={LABEL}>Company</label>
+                      <input value={editState.company} placeholder="Company" onChange={e => setEditState({ ...editState, company: e.target.value })} className={INPUT} />
+                    </div>
+                    <div>
+                      <label className={LABEL}>Position</label>
+                      <input value={editState.position} placeholder="Position" onChange={e => setEditState({ ...editState, position: e.target.value })} className={INPUT} />
+                    </div>
+                    <div>
+                      <label className={LABEL}>Location</label>
+                      <input value={editState.location} placeholder="Location" onChange={e => setEditState({ ...editState, location: e.target.value })} className={INPUT} />
+                    </div>
+                    <div>
+                      <label className={LABEL}>Salary / Range</label>
+                      <input value={editState.salary} placeholder="Salary" onChange={e => setEditState({ ...editState, salary: e.target.value })} className={INPUT} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className={LABEL}>Status</label>
+                    <select
+                      value={editState.status}
+                      onChange={e => setEditState({ ...editState, status: e.target.value })}
+                      className={INPUT}
+                    >
+                      {STATUSES.map(s => <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={LABEL}>Job Description</label>
+                    <textarea value={editState.jobDescription} placeholder="Job Description" onChange={e => setEditState({ ...editState, jobDescription: e.target.value })} className={`${INPUT} h-28 resize-none`} />
+                  </div>
+                  <div>
+                    <label className={LABEL}>Notes</label>
+                    <textarea value={editState.notes} placeholder="Notes" onChange={e => setEditState({ ...editState, notes: e.target.value })} className={`${INPUT} h-16 resize-none`} />
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button onClick={() => saveEdit(job._id)} className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl hover:bg-emerald-700 text-sm font-semibold transition-colors">
+                      <Check size={14} />Save
                     </button>
-                    <button onClick={() => setEditingId(null)} className="bg-gray-100 text-gray-700 px-4 py-2 rounded hover:bg-gray-200 text-sm">
+                    <button onClick={() => setEditingId(null)} className="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 text-sm font-medium transition-colors">
                       Cancel
                     </button>
                   </div>
@@ -532,146 +580,203 @@ export default function Home() {
 
               ) : (
                 /* ── View Mode ── */
-                <div>
-                  <div className="p-4 sm:p-5">
+                <>
+                  <div className="p-5">
+                    {/* Top row: info + badge */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <h3 className="font-bold text-lg text-gray-900 leading-tight">{job.position}</h3>
-                        <p className="text-gray-600 font-medium">{job.company}</p>
-                        <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-gray-500">
-                          {job.location && <span>📍 {job.location}</span>}
-                          {job.salary && <span>💰 {job.salary}</span>}
-                          <span className="text-gray-400">
-                            Added {new Date(job.createdAt).toLocaleDateString()}
-                          </span>
-                        </div>
+                        <h3 className="font-semibold text-[15px] text-slate-900 leading-snug truncate">{job.position}</h3>
+                        <p className="text-sm text-slate-500 font-medium mt-0.5">{job.company}</p>
+
+                        {/* Meta chips */}
+                        {(job.location || job.salary) && (
+                          <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                            {job.location && (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md font-medium">
+                                <MapPin size={10} strokeWidth={2} />{job.location}
+                              </span>
+                            )}
+                            {job.salary && (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md font-medium">
+                                <DollarSign size={10} strokeWidth={2} />{job.salary}
+                              </span>
+                            )}
+                            <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 font-medium">
+                              <CalendarDays size={10} strokeWidth={2} />
+                              {new Date(job.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                      <span className={`shrink-0 px-3 py-1 rounded-full text-sm font-medium capitalize ${STATUS_STYLE[job.status] || 'bg-gray-100 text-gray-700'}`}>
+
+                      <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-semibold capitalize ${STATUS_BADGE[job.status] ?? 'bg-slate-100 text-slate-600'}`}>
                         {job.status}
                       </span>
                     </div>
 
+                    {/* Notes */}
                     {job.notes && (
-                      <p className="mt-3 text-sm text-gray-600 bg-gray-50 rounded-md p-3 border border-gray-100">
+                      <p className="mt-3.5 text-sm text-slate-600 bg-slate-50 rounded-xl p-3 border border-slate-100 leading-relaxed">
                         {job.notes}
                       </p>
                     )}
 
-                    <div className="flex flex-wrap items-center gap-2 mt-4">
+                    {/* Action row */}
+                    <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-slate-100">
                       <button
                         onClick={() => startEdit(job)}
-                        className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-200 text-sm"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-medium transition-colors"
                       >
-                        Edit
+                        <Pencil size={12} />Edit
                       </button>
                       <button
                         onClick={() => deleteJob(job._id)}
-                        className="bg-red-50 text-red-600 px-3 py-1.5 rounded hover:bg-red-100 text-sm"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-rose-500 hover:bg-rose-50 text-xs font-medium transition-colors"
                       >
-                        Delete
+                        <Trash2 size={12} />Delete
                       </button>
+
                       {job.jobDescription && (
                         <button
                           onClick={() => openAiPanel(job._id)}
-                          className="sm:ml-auto bg-purple-600 text-white px-3 py-1.5 rounded hover:bg-purple-700 text-sm font-medium"
+                          className={`ml-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            aiOpenId === job._id
+                              ? 'bg-violet-100 text-violet-700'
+                              : 'bg-linear-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-700 hover:to-indigo-700 shadow-sm shadow-violet-500/20'
+                          }`}
                         >
-                          ✨ AI Tools {aiOpenId === job._id ? '▲' : '▼'}
+                          <Sparkles size={12} />
+                          AI Tools
+                          {aiOpenId === job._id ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                         </button>
                       )}
                     </div>
                   </div>
 
-                  {/* AI Panel */}
+                  {/* ── AI Panel ── */}
                   {aiOpenId === job._id && (
-                    <div className="border-t bg-purple-50 p-4 sm:p-5">
-                      {!myResume ? (
-                        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-3 mb-4">
-                          ⚠️ Add your resume in the "My Resume" section above to use AI tools.
-                        </p>
-                      ) : null}
-
-                      <div className="flex flex-col sm:flex-row gap-2 mb-4">
-                        <button
-                          onClick={() => runAI(job, 'tailor')}
-                          disabled={!myResume || aiLoading !== null}
-                          className="w-full sm:w-auto bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 disabled:opacity-40 text-sm font-medium"
-                        >
-                          {aiLoading === 'tailor' ? '⏳ Tailoring...' : '📝 Tailor My Resume'}
-                        </button>
-                        <button
-                          onClick={() => runAI(job, 'cover')}
-                          disabled={!myResume || aiLoading !== null}
-                          className="w-full sm:w-auto bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 disabled:opacity-40 text-sm font-medium"
-                        >
-                          {aiLoading === 'cover' ? '⏳ Writing...' : '✉️ Write Cover Letter'}
-                        </button>
+                    <div className="border-t border-slate-100">
+                      {/* Dark toolbar */}
+                      <div className="bg-slate-900 px-5 py-4">
+                        {!myResume && (
+                          <div className="flex items-center gap-2 text-xs text-amber-300 bg-amber-400/10 border border-amber-400/20 rounded-xl px-3.5 py-2.5 mb-4">
+                            <AlertCircle size={13} className="shrink-0" />
+                            Add your resume above to unlock AI tools.
+                          </div>
+                        )}
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <button
+                            onClick={() => runAI(job, 'tailor')}
+                            disabled={!myResume || aiLoading !== null}
+                            className="flex items-center justify-center gap-2 flex-1 sm:flex-none bg-white/10 hover:bg-white/15 disabled:opacity-40 text-white border border-white/20 px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
+                          >
+                            {aiLoading === 'tailor' ? (
+                              <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Tailoring…</>
+                            ) : (
+                              <><FileText size={14} />Tailor My Resume</>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => runAI(job, 'cover')}
+                            disabled={!myResume || aiLoading !== null}
+                            className="flex items-center justify-center gap-2 flex-1 sm:flex-none bg-white/10 hover:bg-white/15 disabled:opacity-40 text-white border border-white/20 px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
+                          >
+                            {aiLoading === 'cover' ? (
+                              <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Writing…</>
+                            ) : (
+                              <><Mail size={14} />Write Cover Letter</>
+                            )}
+                          </button>
+                        </div>
                       </div>
 
+                      {/* Error */}
                       {aiError && (
-                        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3 mb-4">
-                          ❌ {aiError}
-                        </p>
+                        <div className="flex items-center gap-2 mx-5 mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5">
+                          <AlertCircle size={14} className="shrink-0" />
+                          {aiError}
+                        </div>
                       )}
 
+                      {/* Output */}
                       {aiOutput && (
-                        <div className="bg-white border rounded-lg overflow-hidden">
-                          <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-                            <h4 className="font-semibold text-sm text-gray-700">
-                              {aiOutput.type === 'tailor' ? '📝 Tailored Resume' : '✉️ Cover Letter'}
-                            </h4>
-                            <div className="flex items-center gap-3">
+                        <div className="m-4 rounded-xl border border-slate-200 overflow-hidden">
+                          {/* Output header */}
+                          <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+                            <div className="flex items-center gap-2">
+                              {aiOutput.type === 'tailor'
+                                ? <FileText size={14} className="text-violet-600" />
+                                : <Mail size={14} className="text-indigo-600" />
+                              }
+                              <span className="text-sm font-semibold text-slate-800">
+                                {aiOutput.type === 'tailor' ? 'Tailored Resume' : 'Cover Letter'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
                               <button
                                 onClick={() => copyToClipboard(aiOutput.content)}
-                                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg font-medium transition-colors hover:border-slate-300"
                               >
-                                {copied ? '✓ Copied!' : 'Copy'}
+                                {copied ? <><Check size={11} className="text-emerald-500" />Copied</> : <><Copy size={11} />Copy</>}
                               </button>
                               <button
                                 onClick={() => openTemplatePicker(aiOutput.content, aiOutput.type, job.company, job.position)}
-                                className="text-xs bg-gray-800 text-white px-2.5 py-1 rounded hover:bg-gray-900 font-medium flex items-center gap-1"
+                                className="flex items-center gap-1.5 text-xs text-white bg-slate-800 hover:bg-slate-900 px-2.5 py-1.5 rounded-lg font-medium transition-colors"
                               >
-                                ↓ Download PDF
+                                <Download size={11} />Download PDF
                               </button>
                               <button
                                 onClick={() => setAiOutput(null)}
-                                className="text-gray-400 hover:text-gray-700 text-lg leading-none font-medium ml-1"
-                                aria-label="Close"
+                                className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
                               >
-                                ×
+                                <X size={14} />
                               </button>
                             </div>
                           </div>
-                          <pre className="p-4 text-sm text-gray-800 whitespace-pre-wrap font-mono leading-relaxed max-h-96 overflow-y-auto">
+                          {/* Output body */}
+                          <pre className="p-4 text-[13px] text-slate-700 whitespace-pre-wrap font-mono leading-relaxed max-h-96 overflow-y-auto bg-white">
                             {aiOutput.content}
                           </pre>
                         </div>
                       )}
                     </div>
                   )}
-                </div>
+                </>
               )}
             </div>
           ))}
 
+          {/* Empty state */}
           {jobs.length === 0 && !showAddForm && (
-            <div className="text-center py-20 text-gray-400">
-              <p className="text-5xl mb-4">📋</p>
-              <p className="text-lg font-medium">No jobs tracked yet</p>
-              <p className="text-sm mt-1">Click "+ Add Job" to get started</p>
+            <div className="flex flex-col items-center justify-center py-24 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-center mb-5">
+                <Briefcase size={28} className="text-slate-300" />
+              </div>
+              <p className="text-base font-semibold text-slate-700">No jobs tracked yet</p>
+              <p className="text-sm text-slate-400 mt-1.5 mb-6">Start building your pipeline by adding your first job.</p>
+              <button
+                onClick={() => setShowAddForm(true)}
+                className="flex items-center gap-2 bg-linear-to-r from-blue-600 to-violet-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-violet-700 transition-all shadow-sm shadow-blue-500/20"
+              >
+                <Plus size={15} strokeWidth={2.5} />Add your first job
+              </button>
             </div>
           )}
         </div>
 
-        {/* Danger Zone */}
+        {/* ── Danger zone ──────────────────────────────────────────── */}
         {jobs.length > 0 && (
-          <div className="mt-10 pt-6 border-t text-center">
-            <button onClick={deleteAll} className="text-red-400 hover:text-red-600 text-sm">
-              Delete all jobs
+          <div className="pt-6 pb-2 flex justify-center border-t border-slate-200">
+            <button
+              onClick={deleteAll}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-rose-500 transition-colors font-medium"
+            >
+              <Trash2 size={12} />Delete all jobs
             </button>
           </div>
         )}
 
-      </div>
+      </main>
     </div>
   );
 }
