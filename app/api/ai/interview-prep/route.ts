@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
+import { handleAiError } from "@/lib/ai-error";
 
 export async function POST(request: Request) {
   const { jobDescription, resume, company, position } = await request.json();
@@ -81,8 +82,6 @@ Return ONLY valid JSON in this exact format:
 
     return NextResponse.json(data);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("Interview prep error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleAiError(err);
   }
 }

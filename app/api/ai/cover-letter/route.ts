@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
+import { handleAiError } from "@/lib/ai-error";
 
 export async function POST(request: Request) {
   const { jobDescription, resume, company, position } = await request.json();
@@ -98,8 +99,6 @@ Return ONLY the formatted cover letter. Zero commentary, no "Here is your cover 
     const text = completion.choices[0].message.content ?? "";
     return NextResponse.json({ result: text });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("Groq cover letter error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleAiError(err);
   }
 }

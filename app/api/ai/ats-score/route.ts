@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Groq from "groq-sdk";
+import { handleAiError } from "@/lib/ai-error";
 
 export async function POST(request: Request) {
   const { jobDescription, resume } = await request.json();
@@ -97,8 +98,6 @@ Return ONLY a valid JSON object in exactly this structure:
 
     return NextResponse.json(data);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("ATS score error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleAiError(err);
   }
 }
