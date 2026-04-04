@@ -8,6 +8,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "GROQ_API_KEY is not set" }, { status: 500 });
   }
 
+  if (!jobDescription || !resume) {
+    return NextResponse.json({ error: "Job description and resume are required" }, { status: 400 });
+  }
+
   try {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -17,42 +21,64 @@ export async function POST(request: Request) {
         {
           role: "system",
           content:
-            "You are an expert interview coach with 20+ years of experience preparing candidates for top companies. You know exactly what questions hiring managers ask and how strong candidates answer them. You give concrete, resume-specific coaching — never generic advice.",
+            "You are an elite interview coach who has prepped candidates for Google, Meta, McKinsey, and top startups. You give brutally honest, resume-specific coaching — never generic advice. You know exactly what interviewers at different company types actually ask and why.",
         },
         {
           role: "user",
-          content: `Generate interview preparation material for this specific candidate and role.
-
-ROLE: ${position} at ${company}
+          content: `Prepare this candidate for their interview at ${company} for the ${position} role.
 
 JOB DESCRIPTION:
-${jobDescription}
+${jobDescription.slice(0, 3000)}
 
 CANDIDATE RESUME:
-${resume}
+${resume.slice(0, 3000)}
 
-Generate exactly 8 interview questions that are highly likely to be asked for this role. Cover a mix of behavioral, technical, and situational questions based on the job requirements.
+Generate exactly 8 interview questions that are highly likely to be asked for this specific role at a company like ${company}. Cover:
+- 3 behavioral questions (past experience, conflict, teamwork)
+- 3 technical/domain questions (specific to the role's requirements)
+- 2 situational questions (hypotheticals relevant to the role)
 
-For each question, write a concise coaching note (2-3 sentences) that references a SPECIFIC detail from this candidate's resume to anchor their answer. Be concrete — mention actual companies, projects, or skills from the resume. Never give generic advice.
+For each question, write coaching guidance (3–4 sentences) that:
+- References a SPECIFIC detail from this candidate's resume (actual company name, project, skill, or metric)
+- Tells them exactly what to say and what to avoid
+- Gives the strategic angle: what the interviewer is really testing for
 
-Return ONLY a JSON object in this exact format:
+Return ONLY valid JSON in this exact format:
 {
   "questions": [
     {
       "question": "The interview question exactly as a hiring manager would ask it",
       "type": "behavioral" | "technical" | "situational",
-      "guidance": "2-3 sentence coaching note referencing the candidate's specific background"
+      "guidance": "3-4 sentence coaching note tied to this candidate's specific resume"
     }
   ]
 }`,
         },
       ],
-      max_tokens: 2048,
+      max_tokens: 2500,
       response_format: { type: "json_object" },
     });
 
     const raw = completion.choices[0].message.content ?? "{}";
-    const data = JSON.parse(raw);
+
+    let data: { questions?: unknown[] };
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      console.error("Interview prep JSON parse error — raw:", raw.slice(0, 200));
+      return NextResponse.json(
+        { error: "Failed to parse AI response. Please try again." },
+        { status: 500 }
+      );
+    }
+
+    if (!Array.isArray(data.questions) || data.questions.length === 0) {
+      return NextResponse.json(
+        { error: "No questions were generated. Please try again." },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(data);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

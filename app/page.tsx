@@ -47,7 +47,17 @@ type TemplateModalState = {
   position: string;
 } | null;
 
-type AtsResult = { score: number; matched: string[]; missing: string[] };
+type AtsSection = { score: number; issue: string | null; fix: string | null };
+type AtsScoreResult = {
+  score: number;
+  grade: string;
+  verdict: string;
+  ready_to_apply: boolean;
+  sections: { keywords: AtsSection; experience: AtsSection; summary: AtsSection; format: AtsSection };
+  critical_missing: string[];
+  matched: string[];
+  top_fix: string;
+};
 type PrepQuestion = { question: string; type: string; guidance: string };
 type PrepResult = { questions: PrepQuestion[] };
 
@@ -69,6 +79,14 @@ const ANALYTICS_NUM: Record<string, string> = {
   interview: 'text-violet-600',
   offer:     'text-emerald-600',
   rejected:  'text-rose-500',
+};
+
+const ANALYTICS_BAR: Record<string, string> = {
+  saved:     'bg-sky-400',
+  applied:   'bg-amber-400',
+  interview: 'bg-violet-400',
+  offer:     'bg-emerald-400',
+  rejected:  'bg-rose-400',
 };
 
 const ANALYTICS_DOT: Record<string, string> = {
@@ -124,7 +142,10 @@ export default function Home() {
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
-  const [atsResult, setAtsResult] = useState<AtsResult | null>(null);
+  const [atsLoading, setAtsLoading] = useState(false);
+  const [atsScore, setAtsScore] = useState<AtsScoreResult | null>(null);
+  const [atsBoostLoading, setAtsBoostLoading] = useState(false);
+  const [atsBoostResult, setAtsBoostResult] = useState<string | null>(null);
   const [prepLoading, setPrepLoading] = useState(false);
   const [prepResult, setPrepResult] = useState<PrepResult | null>(null);
 
@@ -231,6 +252,7 @@ export default function Home() {
   };
 
   const deleteJob = async (id: string) => {
+    if (!confirm('Remove this job from your tracker?')) return;
     const res = await fetch(`/api/jobs/${id}`, { method: 'DELETE' });
     if (res.ok) setJobs(jobs.filter(j => j._id !== id));
   };
@@ -246,7 +268,8 @@ export default function Home() {
     setAiOpenId(newId);
     setAiOutput(null);
     setAiError(null);
-    setAtsResult(null);
+    setAtsScore(null);
+    setAtsBoostResult(null);
     setPrepResult(null);
   };
 
@@ -254,7 +277,8 @@ export default function Home() {
     setAiLoading(type);
     setAiOutput(null);
     setAiError(null);
-    setAtsResult(null);
+    setAtsScore(null);
+    setAtsBoostResult(null);
     setPrepResult(null);
     const endpoint = type === 'tailor' ? '/api/ai/tailor' : '/api/ai/cover-letter';
     const res = await fetch(endpoint, {
@@ -307,47 +331,62 @@ export default function Home() {
     }
   };
 
-  function computeAtsScore(jobDescription: string, resume: string): AtsResult {
-    const stopWords = new Set([
-      'the', 'and', 'for', 'with', 'this', 'that', 'have', 'from', 'are', 'was',
-      'been', 'will', 'your', 'our', 'their', 'they', 'you', 'we', 'not', 'but',
-      'can', 'all', 'its', 'more', 'also', 'such', 'any', 'than', 'into', 'about',
-      'over', 'after', 'above', 'each', 'who', 'how', 'when', 'what', 'where',
-      'which', 'these', 'those', 'work', 'role', 'team', 'able', 'must', 'would',
-      'strong', 'skills', 'using', 'other', 'well',
-    ]);
-    const tokenize = (text: string) =>
-      text.toLowerCase().match(/\b[a-z][a-z+#.-]{2,}\b/g) ?? [];
-    const jdTokens = tokenize(jobDescription).filter(w => !stopWords.has(w));
-    const resumeText = resume.toLowerCase();
-    const freq: Record<string, number> = {};
-    for (const t of jdTokens) freq[t] = (freq[t] ?? 0) + 1;
-    const top = Object.entries(freq)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 40)
-      .map(([w]) => w);
-    const matched = top.filter(w => resumeText.includes(w));
-    const missing = top.filter(w => !resumeText.includes(w)).slice(0, 12);
-    return {
-      score: Math.round((matched.length / Math.max(top.length, 1)) * 100),
-      matched: matched.slice(0, 12),
-      missing,
-    };
-  }
-
-  const runATS = (job: Job) => {
+  const runATS = async (job: Job) => {
     if (!myResume || !job.jobDescription) return;
+    setAtsLoading(true);
     setAiOutput(null);
     setAiError(null);
     setPrepResult(null);
-    setAtsResult(computeAtsScore(job.jobDescription, myResume));
+    setAtsScore(null);
+    setAtsBoostResult(null);
+    try {
+      const res = await fetch('/api/ai/ats-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobDescription: job.jobDescription, resume: myResume }),
+      });
+      const data = await res.json();
+      if (!res.ok) setAiError(data.error || 'ATS analysis failed');
+      else setAtsScore(data);
+    } catch {
+      setAiError('Network error — please try again.');
+    } finally {
+      setAtsLoading(false);
+    }
+  };
+
+  const runAtsBoost = async (job: Job) => {
+    if (!myResume || !job.jobDescription) return;
+    setAtsBoostLoading(true);
+    setAtsBoostResult(null);
+    try {
+      const res = await fetch('/api/ai/ats-boost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobDescription: job.jobDescription,
+          resume: myResume,
+          company: job.company,
+          position: job.position,
+          atsAnalysis: atsScore,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) setAiError(data.error || 'Boost failed');
+      else setAtsBoostResult(data.result);
+    } catch {
+      setAiError('Network error — please try again.');
+    } finally {
+      setAtsBoostLoading(false);
+    }
   };
 
   const runInterviewPrep = async (job: Job) => {
     setPrepLoading(true);
     setAiOutput(null);
     setAiError(null);
-    setAtsResult(null);
+    setAtsScore(null);
+    setAtsBoostResult(null);
     setPrepResult(null);
     try {
       const res = await fetch('/api/ai/interview-prep', {
@@ -442,15 +481,40 @@ export default function Home() {
       {/* ── Page body ──────────────────────────────────────────────────── */}
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
 
-        {/* ── Analytics ─────────────────────────────────────────────── */}
-        <div className="grid grid-cols-5 gap-3">
-          {STATUSES.map(status => (
-            <div key={status} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm text-center flex flex-col items-center gap-1">
-              <div className={`w-1.5 h-1.5 rounded-full ${ANALYTICS_DOT[status]}`} />
-              <div className={`text-2xl font-bold tracking-tight ${ANALYTICS_NUM[status]}`}>{counts[status]}</div>
-              <div className="text-[11px] text-slate-500 capitalize font-medium">{status}</div>
-            </div>
-          ))}
+        {/* ── Pipeline Analytics ────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Application Pipeline</h2>
+            <span className="text-xs text-slate-400 font-medium">{jobs.length} total</span>
+          </div>
+          <div className="grid grid-cols-5 gap-2 mb-4">
+            {STATUSES.map(status => (
+              <div key={status} className="text-center">
+                <div className={`text-xl font-black tracking-tight ${ANALYTICS_NUM[status]}`}>{counts[status]}</div>
+                <div className="text-[10px] text-slate-400 capitalize font-semibold mt-0.5">{status}</div>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1.5">
+            {STATUSES.map(status => {
+              const pct = jobs.length > 0 ? (counts[status] / jobs.length) * 100 : 0;
+              return (
+                <div key={status} className="flex items-center gap-2.5">
+                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${ANALYTICS_DOT[status]}`} />
+                  <div className="w-14 text-[11px] font-semibold text-slate-500 capitalize">{status}</div>
+                  <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${ANALYTICS_BAR[status]}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="w-7 text-right text-[11px] font-bold text-slate-400">
+                    {pct > 0 ? `${Math.round(pct)}%` : ''}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* ── Resume Panel ──────────────────────────────────────────── */}
@@ -994,10 +1058,13 @@ export default function Home() {
                           </button>
                           <button
                             onClick={() => runATS(job)}
-                            disabled={!myResume || aiLoading !== null || prepLoading}
+                            disabled={!myResume || aiLoading !== null || prepLoading || atsLoading || atsBoostLoading}
                             className="flex items-center justify-center gap-2 flex-1 sm:flex-none bg-white/10 hover:bg-white/15 disabled:opacity-40 text-white border border-white/20 px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
                           >
-                            <Target size={14} />ATS Score
+                            {atsLoading
+                              ? <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Analysing…</>
+                              : <><Target size={14} />ATS Score</>
+                            }
                           </button>
                           <button
                             onClick={() => runInterviewPrep(job)}
@@ -1062,75 +1129,145 @@ export default function Home() {
                       )}
 
                       {/* ATS Score output */}
-                      {atsResult && (
-                        <div className="m-4 rounded-xl border border-slate-200 overflow-hidden">
-                          <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
-                            <div className="flex items-center gap-2">
-                              <Target size={14} className="text-blue-600" />
-                              <span className="text-sm font-semibold text-slate-800">ATS Match Score</span>
-                            </div>
-                            <button onClick={() => setAtsResult(null)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors">
-                              <X size={14} />
-                            </button>
-                          </div>
-                          <div className="p-4 space-y-4 bg-white">
-                            {/* Score + bar */}
-                            <div className="flex items-center gap-4">
-                              <div className={`text-4xl font-bold tabular-nums ${atsResult.score >= 70 ? 'text-emerald-600' : atsResult.score >= 50 ? 'text-amber-500' : 'text-rose-500'}`}>
-                                {atsResult.score}%
+                      {atsScore && (() => {
+                        const s = atsScore;
+                        const scoreColor = s.score >= 90 ? 'text-emerald-600' : s.score >= 72 ? 'text-blue-600' : s.score >= 55 ? 'text-amber-500' : 'text-rose-500';
+                        const barColor = s.score >= 90 ? 'bg-emerald-500' : s.score >= 72 ? 'bg-blue-500' : s.score >= 55 ? 'bg-amber-400' : 'bg-rose-400';
+                        const gradeStyle: Record<string, string> = { A: 'bg-emerald-100 text-emerald-700', B: 'bg-blue-100 text-blue-700', C: 'bg-amber-100 text-amber-700', D: 'bg-orange-100 text-orange-700', F: 'bg-rose-100 text-rose-700' };
+                        const sectionMax: Record<string, number> = { keywords: 35, experience: 30, summary: 20, format: 15 };
+                        return (
+                          <div className="m-4 rounded-2xl border border-slate-200 overflow-hidden">
+                            {/* Header */}
+                            <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+                              <div className="flex items-center gap-2">
+                                <Target size={14} className="text-blue-600" />
+                                <span className="text-sm font-bold text-slate-800">ATS Score Analysis</span>
                               </div>
-                              <div className="flex-1">
-                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                                  <div
-                                    className={`h-full rounded-full transition-all duration-700 ${atsResult.score >= 70 ? 'bg-emerald-500' : atsResult.score >= 50 ? 'bg-amber-400' : 'bg-rose-400'}`}
-                                    style={{ width: `${atsResult.score}%` }}
-                                  />
-                                </div>
-                                <p className="text-xs text-slate-500 mt-1.5">
-                                  {atsResult.score >= 70
-                                    ? 'Strong match — you\'re well positioned for this role.'
-                                    : atsResult.score >= 50
-                                      ? 'Good match — add the missing keywords to strengthen your resume.'
-                                      : 'Low match — use AI Tailor to align your resume with this role.'}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Missing keywords */}
-                            {atsResult.missing.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold text-slate-600 mb-2">Missing Keywords — add these to your tailored resume:</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {atsResult.missing.map(w => (
-                                    <span key={w} className="text-[11px] font-medium bg-rose-50 text-rose-600 border border-rose-200 px-2 py-0.5 rounded-md">{w}</span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Matched keywords */}
-                            {atsResult.matched.length > 0 && (
-                              <div>
-                                <p className="text-xs font-semibold text-slate-600 mb-2">Matched Keywords:</p>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {atsResult.matched.map(w => (
-                                    <span key={w} className="text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md">{w}</span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-
-                            {atsResult.score < 70 && (
-                              <button
-                                onClick={() => { setAtsResult(null); runAI(job, 'tailor'); }}
-                                className="w-full flex items-center justify-center gap-2 bg-violet-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-violet-700 transition-colors"
-                              >
-                                <Sparkles size={14} />Use AI Tailor to improve this score
+                              <button onClick={() => { setAtsScore(null); setAtsBoostResult(null); }} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors">
+                                <X size={14} />
                               </button>
-                            )}
+                            </div>
+
+                            <div className="p-4 space-y-5 bg-white">
+                              {/* Score hero */}
+                              <div className="flex items-center gap-4">
+                                <div className="flex items-baseline gap-0.5">
+                                  <span className={`text-5xl font-black tabular-nums ${scoreColor}`}>{s.score}</span>
+                                  <span className={`text-xl font-bold ${scoreColor}`}>%</span>
+                                </div>
+                                <div className="flex-1 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${gradeStyle[s.grade] ?? 'bg-slate-100 text-slate-600'}`}>Grade {s.grade}</span>
+                                    <span className={`text-xs font-bold ${s.ready_to_apply ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                      {s.ready_to_apply ? '✓ Ready to apply' : '⚠ Needs work'}
+                                    </span>
+                                  </div>
+                                  <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                    <div className={`h-full rounded-full transition-all duration-700 ${barColor}`} style={{ width: `${s.score}%` }} />
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Verdict */}
+                              <p className="text-sm text-slate-700 bg-slate-50 rounded-xl px-4 py-3 border border-slate-100 leading-relaxed">{s.verdict}</p>
+
+                              {/* Section breakdown */}
+                              <div>
+                                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-3">Section Breakdown</p>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                  {(Object.entries(s.sections) as [string, AtsSection][]).map(([key, sec]) => {
+                                    const max = sectionMax[key] ?? 25;
+                                    const pct = Math.round((sec.score / max) * 100);
+                                    const cls = pct >= 80 ? 'bg-emerald-50 border-emerald-200' : pct >= 60 ? 'bg-amber-50 border-amber-200' : 'bg-rose-50 border-rose-200';
+                                    const numCls = pct >= 80 ? 'text-emerald-700' : pct >= 60 ? 'text-amber-600' : 'text-rose-600';
+                                    return (
+                                      <div key={key} className={`rounded-xl p-3 border ${cls}`}>
+                                        <div className={`text-lg font-black ${numCls}`}>{pct}%</div>
+                                        <div className="text-[11px] font-bold text-slate-600 capitalize mb-1.5">{key}</div>
+                                        {sec.issue && <div className="text-[10px] text-slate-500 leading-tight">{sec.issue}</div>}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* Top fix */}
+                              {s.top_fix && (
+                                <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
+                                  <AlertCircle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                                  <div>
+                                    <p className="text-[11px] font-bold text-amber-800 uppercase tracking-wide mb-0.5">Top Fix</p>
+                                    <p className="text-xs text-amber-700 leading-relaxed">{s.top_fix}</p>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Keywords */}
+                              {s.critical_missing.length > 0 && (
+                                <div>
+                                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">Critical Missing Keywords</p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {s.critical_missing.map(w => (
+                                      <span key={w} className="text-[11px] font-semibold bg-rose-50 text-rose-600 border border-rose-200 px-2.5 py-1 rounded-lg">{w}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {s.matched.length > 0 && (
+                                <div>
+                                  <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-2">Matched Keywords</p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {s.matched.map(w => (
+                                      <span key={w} className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg">{w}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Auto-fix CTA */}
+                              <button
+                                onClick={() => runAtsBoost(job)}
+                                disabled={atsBoostLoading}
+                                className="w-full flex items-center justify-center gap-2 bg-linear-to-r from-violet-600 to-indigo-600 text-white px-4 py-3 rounded-xl text-sm font-bold hover:from-violet-700 hover:to-indigo-700 disabled:opacity-50 transition-all shadow-sm shadow-violet-500/20"
+                              >
+                                {atsBoostLoading
+                                  ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Optimising resume…</>
+                                  : <><Sparkles size={15} />Auto-Fix to 90%+ — Rewrite My Resume</>
+                                }
+                              </button>
+
+                              {/* Boosted resume output */}
+                              {atsBoostResult && (
+                                <div className="rounded-xl border border-violet-200 overflow-hidden">
+                                  <div className="flex items-center justify-between px-4 py-3 bg-violet-50 border-b border-violet-200">
+                                    <div className="flex items-center gap-2">
+                                      <Sparkles size={13} className="text-violet-600" />
+                                      <span className="text-sm font-bold text-violet-900">Optimised Resume — Target 90%+</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <button
+                                        onClick={() => copyToClipboard(atsBoostResult)}
+                                        className="flex items-center gap-1.5 text-xs text-violet-600 hover:text-violet-800 bg-white border border-violet-200 px-2.5 py-1.5 rounded-lg font-semibold transition-colors"
+                                      >
+                                        {copied ? <><Check size={11} />Copied</> : <><Copy size={11} />Copy</>}
+                                      </button>
+                                      <button
+                                        onClick={() => openTemplatePicker(atsBoostResult, 'tailor', job.company, job.position)}
+                                        className="flex items-center gap-1.5 text-xs text-white bg-violet-600 hover:bg-violet-700 px-2.5 py-1.5 rounded-lg font-semibold transition-colors"
+                                      >
+                                        <Download size={11} />PDF
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <pre className="p-4 text-[13px] text-slate-700 whitespace-pre-wrap font-mono leading-relaxed max-h-96 overflow-y-auto bg-white">
+                                    {atsBoostResult}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       {/* Interview Prep output */}
                       {prepResult && (
