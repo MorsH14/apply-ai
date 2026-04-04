@@ -1,40 +1,62 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import connectDB from "@/lib/db";
-import Job from "@/models/Job";
+import { sql, ensureSchema } from "@/lib/db";
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 
-// Get all jobs for current user
+// Map a SQL row to the shape the frontend expects (preserving _id for compatibility)
+function mapJob(row: Record<string, unknown>) {
+  return {
+    _id: row.id,
+    userId: row.user_id,
+    company: row.company,
+    position: row.position,
+    status: row.status,
+    location: row.location || "",
+    salary: row.salary || "",
+    jobDescription: row.job_description || "",
+    notes: row.notes || "",
+    createdAt: row.created_at,
+  };
+}
+
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return unauthorized();
 
-  await connectDB();
-  const jobs = await Job.find({ userId: session.user.id }).sort({ createdAt: -1 });
-  return NextResponse.json(jobs);
+  await ensureSchema();
+  const result = await sql`
+    SELECT * FROM jobs WHERE user_id = ${session.user.id} ORDER BY created_at DESC
+  `;
+  return NextResponse.json(result.rows.map(mapJob));
 }
 
-// Create new job for current user
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return unauthorized();
 
-  await connectDB();
-  const data = await request.json();
-  const job = await Job.create({ ...data, userId: session.user.id });
-  return NextResponse.json(job);
+  await ensureSchema();
+  const {
+    company, position,
+    status = "saved", location = "", salary = "", jobDescription = "", notes = "",
+  } = await request.json();
+
+  const result = await sql`
+    INSERT INTO jobs (user_id, company, position, status, location, salary, job_description, notes)
+    VALUES (${session.user.id}, ${company}, ${position}, ${status}, ${location}, ${salary}, ${jobDescription}, ${notes})
+    RETURNING *
+  `;
+  return NextResponse.json(mapJob(result.rows[0]));
 }
 
-// Delete all jobs for current user
 export async function DELETE() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return unauthorized();
 
-  await connectDB();
-  await Job.deleteMany({ userId: session.user.id });
+  await ensureSchema();
+  await sql`DELETE FROM jobs WHERE user_id = ${session.user.id}`;
   return NextResponse.json({ message: "All jobs deleted" });
 }

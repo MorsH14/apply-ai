@@ -8,7 +8,7 @@ import {
   Briefcase, FileText, Sparkles, Mail, Pencil, Trash2,
   ChevronDown, ChevronUp, Copy, Download, X, LogOut,
   Upload, Plus, Check, AlertCircle, MapPin, DollarSign,
-  CalendarDays,
+  CalendarDays, Link2, Brain, Target,
 } from 'lucide-react';
 
 const TemplatePickerModal = dynamic(() => import('@/components/TemplatePickerModal'), { ssr: false });
@@ -46,6 +46,10 @@ type TemplateModalState = {
   company: string;
   position: string;
 } | null;
+
+type AtsResult = { score: number; matched: string[]; missing: string[] };
+type PrepQuestion = { question: string; type: string; guidance: string };
+type PrepResult = { questions: PrepQuestion[] };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -101,6 +105,9 @@ export default function Home() {
   const [resumeSaving, setResumeSaving] = useState(false);
   const [resumeSavedAt, setResumeSavedAt] = useState<Date | null>(null);
   const [showResumePanel, setShowResumePanel] = useState(false);
+  const [resumeMode, setResumeMode] = useState<'view' | 'edit'>('view');
+  const [resumeTab, setResumeTab] = useState<'upload' | 'paste'>('upload');
+  const [uploadedFileName, setUploadedFileName] = useState('');
   const [uploadingResume, setUploadingResume] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -112,6 +119,14 @@ export default function Home() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [templateModal, setTemplateModal] = useState<TemplateModalState>(null);
+
+  const [importUrl, setImportUrl] = useState('');
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const [atsResult, setAtsResult] = useState<AtsResult | null>(null);
+  const [prepLoading, setPrepLoading] = useState(false);
+  const [prepResult, setPrepResult] = useState<PrepResult | null>(null);
 
   useEffect(() => {
     fetch('/api/jobs').then(r => r.json()).then(setJobs);
@@ -145,7 +160,7 @@ export default function Home() {
     setMyResume(resumeDraft);
     setResumeSavedAt(new Date());
     setResumeSaving(false);
-    setShowResumePanel(false);
+    setResumeMode('view');
     showToast('Resume saved successfully');
   };
 
@@ -165,6 +180,7 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) { setUploadError(data.error || 'Upload failed.'); return; }
       setResumeDraft(data.text);
+      setUploadedFileName(file.name);
     } catch {
       setUploadError('Network error — please try again.');
     } finally {
@@ -230,12 +246,16 @@ export default function Home() {
     setAiOpenId(newId);
     setAiOutput(null);
     setAiError(null);
+    setAtsResult(null);
+    setPrepResult(null);
   };
 
   const runAI = async (job: Job, type: 'tailor' | 'cover') => {
     setAiLoading(type);
     setAiOutput(null);
     setAiError(null);
+    setAtsResult(null);
+    setPrepResult(null);
     const endpoint = type === 'tailor' ? '/api/ai/tailor' : '/api/ai/cover-letter';
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -256,6 +276,98 @@ export default function Home() {
 
   const openTemplatePicker = (content: string, type: 'tailor' | 'cover', company: string, position: string) => {
     setTemplateModal({ content, type: type === 'tailor' ? 'resume' : 'cover', company, position });
+  };
+
+  const handleImport = async () => {
+    if (!importUrl.trim()) return;
+    setImportLoading(true);
+    setImportError(null);
+    try {
+      const res = await fetch('/api/jobs/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: importUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setImportError(data.error || 'Import failed'); return; }
+      setAddState(prev => ({
+        ...prev,
+        company: data.company || prev.company,
+        position: data.position || prev.position,
+        location: data.location || prev.location,
+        salary: data.salary || prev.salary,
+        jobDescription: data.jobDescription || prev.jobDescription,
+      }));
+      setImportUrl('');
+      showToast('Job imported — review and save');
+    } catch {
+      setImportError('Network error — please try again.');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  function computeAtsScore(jobDescription: string, resume: string): AtsResult {
+    const stopWords = new Set([
+      'the', 'and', 'for', 'with', 'this', 'that', 'have', 'from', 'are', 'was',
+      'been', 'will', 'your', 'our', 'their', 'they', 'you', 'we', 'not', 'but',
+      'can', 'all', 'its', 'more', 'also', 'such', 'any', 'than', 'into', 'about',
+      'over', 'after', 'above', 'each', 'who', 'how', 'when', 'what', 'where',
+      'which', 'these', 'those', 'work', 'role', 'team', 'able', 'must', 'would',
+      'strong', 'skills', 'using', 'other', 'well',
+    ]);
+    const tokenize = (text: string) =>
+      text.toLowerCase().match(/\b[a-z][a-z+#.-]{2,}\b/g) ?? [];
+    const jdTokens = tokenize(jobDescription).filter(w => !stopWords.has(w));
+    const resumeText = resume.toLowerCase();
+    const freq: Record<string, number> = {};
+    for (const t of jdTokens) freq[t] = (freq[t] ?? 0) + 1;
+    const top = Object.entries(freq)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 40)
+      .map(([w]) => w);
+    const matched = top.filter(w => resumeText.includes(w));
+    const missing = top.filter(w => !resumeText.includes(w)).slice(0, 12);
+    return {
+      score: Math.round((matched.length / Math.max(top.length, 1)) * 100),
+      matched: matched.slice(0, 12),
+      missing,
+    };
+  }
+
+  const runATS = (job: Job) => {
+    if (!myResume || !job.jobDescription) return;
+    setAiOutput(null);
+    setAiError(null);
+    setPrepResult(null);
+    setAtsResult(computeAtsScore(job.jobDescription, myResume));
+  };
+
+  const runInterviewPrep = async (job: Job) => {
+    setPrepLoading(true);
+    setAiOutput(null);
+    setAiError(null);
+    setAtsResult(null);
+    setPrepResult(null);
+    try {
+      const res = await fetch('/api/ai/interview-prep', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobDescription: job.jobDescription,
+          resume: myResume,
+          company: job.company,
+          position: job.position,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) setAiError(data.error || 'Something went wrong');
+      else setPrepResult(data);
+    } catch {
+      setAiError('Network error — please try again.');
+    } finally {
+      setPrepLoading(false);
+    }
   };
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -310,7 +422,7 @@ export default function Home() {
               </div>
             )}
             <button
-              onClick={() => { setShowAddForm(!showAddForm); setEditingId(null); }}
+              onClick={() => { setShowAddForm(!showAddForm); setEditingId(null); setImportUrl(''); setImportError(null); }}
               className="flex items-center gap-1.5 bg-linear-to-r from-blue-600 to-violet-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-violet-700 transition-all shadow-sm shadow-blue-500/20"
             >
               <Plus size={15} strokeWidth={2.5} />
@@ -344,19 +456,39 @@ export default function Home() {
         {/* ── Resume Panel ──────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <button
-            onClick={() => setShowResumePanel(!showResumePanel)}
+            onClick={() => {
+              const next = !showResumePanel;
+              setShowResumePanel(next);
+              if (next) {
+                setResumeMode(myResume ? 'view' : 'edit');
+                setResumeTab('upload');
+                setUploadedFileName('');
+                setUploadError(null);
+              }
+            }}
             className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-50/60 transition-colors group"
           >
             <div className="flex items-center gap-3.5">
-              <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${myResume ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-500'}`}>
                 <FileText size={17} />
               </div>
               <div>
-                <p className="font-semibold text-slate-900 text-sm">My Resume</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-slate-900 text-sm">My Resume</p>
+                  {myResume ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-md">
+                      <Check size={9} strokeWidth={3} />Ready
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-md">
+                      Required for AI
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {myResume
-                    ? `${myResume.trim().split(/\s+/).length} words · ${resumeSavedAt ? `Last saved ${resumeSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Saved'}`
-                    : 'Not added yet — required for AI tools'}
+                    ? `${myResume.trim().split(/\s+/).length} words${resumeSavedAt ? ` · Saved ${resumeSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}`
+                    : 'Add your resume to unlock all AI features'}
                 </p>
               </div>
             </div>
@@ -366,82 +498,202 @@ export default function Home() {
           </button>
 
           {showResumePanel && (
-            <div className="border-t border-slate-100 px-5 py-5 space-y-4">
-              <p className="text-sm text-slate-500 leading-relaxed">
-                Upload your resume <span className="font-medium text-slate-700">(PDF, DOCX, or TXT)</span> or paste it as plain text. It's stored securely and only used by AI tools.
-              </p>
+            <div className="border-t border-slate-100">
 
-              {/* Drop zone */}
-              <div
-                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={handleDrop}
-                onClick={() => document.getElementById('resume-file-input')?.click()}
-                className={`relative flex flex-col items-center justify-center gap-2.5 border-2 border-dashed rounded-xl px-6 py-8 transition-all cursor-pointer
-                  ${dragOver ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-slate-50/60 hover:border-blue-300 hover:bg-blue-50/40'}`}
-              >
-                <input
-                  id="resume-file-input"
-                  type="file"
-                  accept=".pdf,.docx,.txt"
-                  className="hidden"
-                  onChange={e => { const f = e.target.files?.[0]; if (f) handleResumeFile(f); e.target.value = ''; }}
-                />
-                {uploadingResume ? (
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm text-blue-600 font-medium">Extracting text…</p>
+              {/* ── View mode: resume is saved and no pending edits ── */}
+              {resumeMode === 'view' && myResume ? (
+                <div className="p-5 space-y-4">
+
+                  {/* Stats row */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(() => {
+                      const wc = myResume.trim().split(/\s+/).length;
+                      const quality = wc < 150 ? { label: 'Too short', cls: 'bg-amber-50 text-amber-700 border-amber-200' } : wc < 350 ? { label: 'Good', cls: 'bg-blue-50 text-blue-700 border-blue-200' } : { label: 'Strong', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+                      return (
+                        <>
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200 px-3 py-1.5 rounded-lg">
+                            <FileText size={12} />{wc} words
+                          </span>
+                          <span className={`inline-flex items-center gap-1.5 text-xs font-semibold border px-3 py-1.5 rounded-lg ${quality.cls}`}>
+                            {quality.label}
+                          </span>
+                          {uploadedFileName && (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg truncate max-w-[180px]">
+                              <Check size={11} className="text-emerald-500 shrink-0" />{uploadedFileName}
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
-                ) : (
-                  <>
-                    <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-400 shadow-sm">
-                      <Upload size={18} />
-                    </div>
-                    <p className="text-sm font-medium text-slate-700">
-                      {dragOver ? 'Drop to upload' : 'Drag & drop your resume'}
-                    </p>
-                    <p className="text-xs text-slate-400">or click to browse — PDF, DOCX, TXT</p>
-                  </>
-                )}
-              </div>
 
-              {uploadError && (
-                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5">
-                  <AlertCircle size={14} className="shrink-0" />
-                  {uploadError}
+                  {/* Preview card */}
+                  <div className="rounded-2xl border border-slate-200 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-200">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Resume Preview</span>
+                      <span className="text-[11px] text-slate-400">First 400 characters</span>
+                    </div>
+                    <div className="px-4 py-3.5 bg-white">
+                      <p className="text-xs text-slate-600 font-mono leading-relaxed whitespace-pre-wrap line-clamp-5">
+                        {myResume.slice(0, 400)}{myResume.length > 400 ? '…' : ''}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => { setResumeMode('edit'); setResumeTab('upload'); setUploadedFileName(''); setUploadError(null); }}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 text-sm font-medium transition-colors"
+                    >
+                      <Upload size={13} />Replace File
+                    </button>
+                    <button
+                      onClick={() => { setResumeMode('edit'); setResumeTab('paste'); }}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 text-sm font-medium transition-colors"
+                    >
+                      <Pencil size={13} />Edit Text
+                    </button>
+                  </div>
+                </div>
+
+              ) : (
+                /* ── Edit mode: upload or paste ── */
+                <div className="p-5 space-y-4">
+
+                  {/* Tab switcher */}
+                  <div className="flex rounded-xl bg-slate-100 p-1 gap-1">
+                    <button
+                      onClick={() => setResumeTab('upload')}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-lg transition-all ${resumeTab === 'upload' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      <Upload size={13} />Upload File
+                    </button>
+                    <button
+                      onClick={() => setResumeTab('paste')}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-lg transition-all ${resumeTab === 'paste' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      <Pencil size={13} />Paste Text
+                    </button>
+                  </div>
+
+                  {resumeTab === 'upload' ? (
+                    <div className="space-y-3">
+
+                      {/* Drop zone */}
+                      <div
+                        onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                        onDragLeave={() => setDragOver(false)}
+                        onDrop={handleDrop}
+                        onClick={() => document.getElementById('resume-file-input')?.click()}
+                        className={`relative flex flex-col items-center justify-center gap-4 border-2 border-dashed rounded-2xl px-6 py-12 cursor-pointer transition-all ${
+                          dragOver
+                            ? 'border-blue-400 bg-blue-50/70 scale-[1.01]'
+                            : uploadedFileName
+                              ? 'border-emerald-300 bg-emerald-50/50 hover:bg-emerald-50'
+                              : 'border-slate-200 bg-slate-50/60 hover:border-blue-300 hover:bg-blue-50/30'
+                        }`}
+                      >
+                        <input
+                          id="resume-file-input"
+                          type="file"
+                          accept=".pdf,.docx,.txt"
+                          className="hidden"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) handleResumeFile(f); e.target.value = ''; }}
+                        />
+
+                        {uploadingResume ? (
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center">
+                              <div className="w-6 h-6 border-[3px] border-blue-500 border-t-transparent rounded-full animate-spin" />
+                            </div>
+                            <div className="text-center">
+                              <p className="text-sm font-bold text-blue-700">Extracting text…</p>
+                              <p className="text-xs text-blue-500 mt-0.5">Reading your resume</p>
+                            </div>
+                          </div>
+                        ) : uploadedFileName ? (
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center">
+                              <Check size={26} className="text-emerald-600" strokeWidth={2.5} />
+                            </div>
+                            <div className="text-center">
+                              <p className="text-sm font-bold text-emerald-700">{uploadedFileName}</p>
+                              <p className="text-xs text-emerald-600 mt-0.5">{resumeDraft.trim().split(/\s+/).length} words extracted · click to replace</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                              <Upload size={24} className="text-white" />
+                            </div>
+                            <div className="text-center space-y-1">
+                              <p className="text-sm font-bold text-slate-800">
+                                {dragOver ? 'Drop it here' : 'Drag & drop your resume'}
+                              </p>
+                              <p className="text-xs text-slate-400">or click to browse your files</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {['PDF', 'DOCX', 'TXT'].map(fmt => (
+                                <span key={fmt} className="text-[11px] font-bold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-sm tracking-wide">
+                                  {fmt}
+                                </span>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {uploadError && (
+                        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5">
+                          <AlertCircle size={14} className="shrink-0" />
+                          {uploadError}
+                        </div>
+                      )}
+                    </div>
+
+                  ) : (
+                    /* Paste tab */
+                    <div className="space-y-2">
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        Paste your full resume — name, contact info, work experience, education, and skills.
+                      </p>
+                      <textarea
+                        value={resumeDraft}
+                        onChange={e => setResumeDraft(e.target.value)}
+                        placeholder={'John Smith\njohn@email.com | +1 555 000 0000\n\nEXPERIENCE\nCompany Name | Role | 2022–Present\n• Achievement with measurable impact…'}
+                        className="w-full h-64 p-4 border border-slate-200 rounded-xl text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-slate-50/60 leading-relaxed text-slate-800 placeholder:text-slate-400 transition-colors"
+                      />
+                    </div>
+                  )}
+
+                  {/* Word count + save row — show when there's content to save */}
+                  {resumeDraft.trim() && (
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                      <div className="flex items-center gap-2">
+                        {(() => {
+                          const wc = resumeDraft.trim().split(/\s+/).length;
+                          const quality = wc < 150 ? { label: 'Too short — add more detail', cls: 'text-amber-600 bg-amber-50 border-amber-200' } : wc < 350 ? { label: `${wc} words — good`, cls: 'text-blue-600 bg-blue-50 border-blue-200' } : { label: `${wc} words — strong`, cls: 'text-emerald-600 bg-emerald-50 border-emerald-200' };
+                          return <span className={`text-[11px] font-semibold border px-2 py-1 rounded-lg ${quality.cls}`}>{quality.label}</span>;
+                        })()}
+                        {resumeDraft !== myResume && (
+                          <span className="text-[11px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg">Unsaved</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={handleSaveResume}
+                        disabled={resumeSaving || !resumeDraft.trim() || resumeDraft === myResume}
+                        className="flex items-center gap-2 bg-linear-to-r from-blue-600 to-violet-600 text-white px-5 py-2 rounded-xl hover:from-blue-700 hover:to-violet-700 text-sm font-semibold disabled:opacity-40 transition-all shadow-sm shadow-blue-500/20"
+                      >
+                        {resumeSaving
+                          ? <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Saving…</>
+                          : <><Check size={14} />Save Resume</>
+                        }
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
-
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-slate-200" />
-                <span className="text-xs text-slate-400 font-medium">or paste as text</span>
-                <div className="flex-1 h-px bg-slate-200" />
-              </div>
-
-              <textarea
-                value={resumeDraft}
-                onChange={e => setResumeDraft(e.target.value)}
-                placeholder="Paste your full resume here — work experience, education, skills, achievements…"
-                className="w-full h-52 p-4 border border-slate-200 rounded-xl text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-slate-50/60 leading-relaxed text-slate-800 placeholder:text-slate-400 transition-colors"
-              />
-
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-400">
-                  {resumeDraft.trim() ? `${resumeDraft.trim().split(/\s+/).length} words` : 'Empty'}
-                  {resumeDraft !== myResume && <span className="ml-2 text-amber-500 font-medium">· Unsaved changes</span>}
-                </span>
-                <button
-                  onClick={handleSaveResume}
-                  disabled={resumeSaving || !resumeDraft.trim() || resumeDraft === myResume}
-                  className="flex items-center gap-2 bg-blue-600 text-white px-5 py-2 rounded-xl hover:bg-blue-700 text-sm font-semibold disabled:opacity-40 transition-colors"
-                >
-                  {resumeSaving ? (
-                    <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Saving…</>
-                  ) : (
-                    <><Check size={14} />Save Resume</>
-                  )}
-                </button>
-              </div>
             </div>
           )}
         </div>
@@ -461,6 +713,59 @@ export default function Home() {
               </button>
             </div>
             <form onSubmit={handleAdd} className="p-5 space-y-4">
+
+              {/* ── URL Import ── */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className={LABEL + ' mb-0'}>Import from job listing URL</label>
+                  <span className="text-[11px] text-slate-400">Works with LinkedIn, Indeed, Greenhouse, Lever, Workday, Zoho & more</span>
+                </div>
+
+                {/* How-to hint */}
+                <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3.5 py-2.5">
+                  <Link2 size={13} className="text-blue-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-blue-700 leading-relaxed">
+                    Open the job listing in your browser → copy the URL from the address bar → paste it below. Make sure it's the page for a <span className="font-semibold">specific job</span>, not a search results page.
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://www.linkedin.com/jobs/view/… or any job listing URL"
+                    value={importUrl}
+                    onChange={e => { setImportUrl(e.target.value); setImportError(null); }}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleImport(); } }}
+                    className={INPUT}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleImport}
+                    disabled={!importUrl.trim() || importLoading}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-800 disabled:opacity-40 transition-colors shrink-0"
+                  >
+                    {importLoading ? (
+                      <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Importing…</>
+                    ) : (
+                      <><Link2 size={13} />Import</>
+                    )}
+                  </button>
+                </div>
+
+                {importError && (
+                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5">
+                    <AlertCircle size={14} className="shrink-0" />
+                    {importError}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-slate-200" />
+                <span className="text-xs text-slate-400 font-medium">or fill in manually</span>
+                <div className="flex-1 h-px bg-slate-200" />
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={LABEL}>Company <span className="text-rose-400">*</span></label>
@@ -512,7 +817,7 @@ export default function Home() {
                 <button type="submit" className="flex items-center gap-2 bg-linear-to-r from-blue-600 to-violet-600 text-white px-5 py-2.5 rounded-xl hover:from-blue-700 hover:to-violet-700 text-sm font-semibold transition-all shadow-sm shadow-blue-500/20">
                   <Plus size={14} strokeWidth={2.5} />Add Job
                 </button>
-                <button type="button" onClick={() => setShowAddForm(false)} className="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 text-sm font-medium transition-colors">
+                <button type="button" onClick={() => { setShowAddForm(false); setImportUrl(''); setImportError(null); }} className="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 text-sm font-medium transition-colors">
                   Cancel
                 </button>
               </div>
@@ -664,27 +969,45 @@ export default function Home() {
                             Add your resume above to unlock AI tools.
                           </div>
                         )}
-                        <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="flex flex-col sm:flex-row flex-wrap gap-2">
                           <button
                             onClick={() => runAI(job, 'tailor')}
-                            disabled={!myResume || aiLoading !== null}
+                            disabled={!myResume || aiLoading !== null || prepLoading}
                             className="flex items-center justify-center gap-2 flex-1 sm:flex-none bg-white/10 hover:bg-white/15 disabled:opacity-40 text-white border border-white/20 px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
                           >
                             {aiLoading === 'tailor' ? (
                               <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Tailoring…</>
                             ) : (
-                              <><FileText size={14} />Tailor My Resume</>
+                              <><FileText size={14} />Tailor Resume</>
                             )}
                           </button>
                           <button
                             onClick={() => runAI(job, 'cover')}
-                            disabled={!myResume || aiLoading !== null}
+                            disabled={!myResume || aiLoading !== null || prepLoading}
                             className="flex items-center justify-center gap-2 flex-1 sm:flex-none bg-white/10 hover:bg-white/15 disabled:opacity-40 text-white border border-white/20 px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
                           >
                             {aiLoading === 'cover' ? (
                               <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Writing…</>
                             ) : (
-                              <><Mail size={14} />Write Cover Letter</>
+                              <><Mail size={14} />Cover Letter</>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => runATS(job)}
+                            disabled={!myResume || aiLoading !== null || prepLoading}
+                            className="flex items-center justify-center gap-2 flex-1 sm:flex-none bg-white/10 hover:bg-white/15 disabled:opacity-40 text-white border border-white/20 px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
+                          >
+                            <Target size={14} />ATS Score
+                          </button>
+                          <button
+                            onClick={() => runInterviewPrep(job)}
+                            disabled={!myResume || aiLoading !== null || prepLoading}
+                            className="flex items-center justify-center gap-2 flex-1 sm:flex-none bg-white/10 hover:bg-white/15 disabled:opacity-40 text-white border border-white/20 px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
+                          >
+                            {prepLoading ? (
+                              <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Prepping…</>
+                            ) : (
+                              <><Brain size={14} />Interview Prep</>
                             )}
                           </button>
                         </div>
@@ -698,10 +1021,9 @@ export default function Home() {
                         </div>
                       )}
 
-                      {/* Output */}
+                      {/* Tailor / Cover Letter output */}
                       {aiOutput && (
                         <div className="m-4 rounded-xl border border-slate-200 overflow-hidden">
-                          {/* Output header */}
                           <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
                             <div className="flex items-center gap-2">
                               {aiOutput.type === 'tailor'
@@ -733,10 +1055,116 @@ export default function Home() {
                               </button>
                             </div>
                           </div>
-                          {/* Output body */}
                           <pre className="p-4 text-[13px] text-slate-700 whitespace-pre-wrap font-mono leading-relaxed max-h-96 overflow-y-auto bg-white">
                             {aiOutput.content}
                           </pre>
+                        </div>
+                      )}
+
+                      {/* ATS Score output */}
+                      {atsResult && (
+                        <div className="m-4 rounded-xl border border-slate-200 overflow-hidden">
+                          <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+                            <div className="flex items-center gap-2">
+                              <Target size={14} className="text-blue-600" />
+                              <span className="text-sm font-semibold text-slate-800">ATS Match Score</span>
+                            </div>
+                            <button onClick={() => setAtsResult(null)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors">
+                              <X size={14} />
+                            </button>
+                          </div>
+                          <div className="p-4 space-y-4 bg-white">
+                            {/* Score + bar */}
+                            <div className="flex items-center gap-4">
+                              <div className={`text-4xl font-bold tabular-nums ${atsResult.score >= 70 ? 'text-emerald-600' : atsResult.score >= 50 ? 'text-amber-500' : 'text-rose-500'}`}>
+                                {atsResult.score}%
+                              </div>
+                              <div className="flex-1">
+                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-700 ${atsResult.score >= 70 ? 'bg-emerald-500' : atsResult.score >= 50 ? 'bg-amber-400' : 'bg-rose-400'}`}
+                                    style={{ width: `${atsResult.score}%` }}
+                                  />
+                                </div>
+                                <p className="text-xs text-slate-500 mt-1.5">
+                                  {atsResult.score >= 70
+                                    ? 'Strong match — you\'re well positioned for this role.'
+                                    : atsResult.score >= 50
+                                      ? 'Good match — add the missing keywords to strengthen your resume.'
+                                      : 'Low match — use AI Tailor to align your resume with this role.'}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Missing keywords */}
+                            {atsResult.missing.length > 0 && (
+                              <div>
+                                <p className="text-xs font-semibold text-slate-600 mb-2">Missing Keywords — add these to your tailored resume:</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {atsResult.missing.map(w => (
+                                    <span key={w} className="text-[11px] font-medium bg-rose-50 text-rose-600 border border-rose-200 px-2 py-0.5 rounded-md">{w}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Matched keywords */}
+                            {atsResult.matched.length > 0 && (
+                              <div>
+                                <p className="text-xs font-semibold text-slate-600 mb-2">Matched Keywords:</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {atsResult.matched.map(w => (
+                                    <span key={w} className="text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md">{w}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {atsResult.score < 70 && (
+                              <button
+                                onClick={() => { setAtsResult(null); runAI(job, 'tailor'); }}
+                                className="w-full flex items-center justify-center gap-2 bg-violet-600 text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-violet-700 transition-colors"
+                              >
+                                <Sparkles size={14} />Use AI Tailor to improve this score
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Interview Prep output */}
+                      {prepResult && (
+                        <div className="m-4 rounded-xl border border-slate-200 overflow-hidden">
+                          <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+                            <div className="flex items-center gap-2">
+                              <Brain size={14} className="text-violet-600" />
+                              <span className="text-sm font-semibold text-slate-800">Interview Prep</span>
+                              <span className="text-xs text-slate-400 font-normal">— {prepResult.questions?.length ?? 0} questions</span>
+                            </div>
+                            <button onClick={() => setPrepResult(null)} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors">
+                              <X size={14} />
+                            </button>
+                          </div>
+                          <div className="divide-y divide-slate-100 bg-white max-h-[520px] overflow-y-auto">
+                            {prepResult.questions?.map((q, i) => (
+                              <div key={i} className="p-4 space-y-2">
+                                <div className="flex items-start gap-2.5">
+                                  <span className="shrink-0 w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-[10px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <p className="text-sm font-semibold text-slate-900 leading-snug">{q.question}</p>
+                                    </div>
+                                    <span className={`inline-block text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded mb-1.5 ${
+                                      q.type === 'behavioral' ? 'bg-blue-50 text-blue-600' :
+                                      q.type === 'technical' ? 'bg-emerald-50 text-emerald-700' :
+                                      'bg-amber-50 text-amber-700'
+                                    }`}>{q.type}</span>
+                                    <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 rounded-lg p-2.5 border border-slate-100">{q.guidance}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>

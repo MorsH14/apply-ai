@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import connectDB from "@/lib/db";
-import User from "@/models/User";
+import { sql, ensureSchema } from "@/lib/db";
 
 export async function POST(request: Request) {
   const { username, password } = await request.json();
@@ -13,14 +12,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 });
   }
 
-  await connectDB();
-  const existing = await User.findOne({ username: username.toLowerCase() });
-  if (existing) {
+  await ensureSchema();
+
+  const existing = await sql`SELECT id FROM users WHERE username = ${username.toLowerCase()}`;
+  if (existing.rows.length > 0) {
     return NextResponse.json({ error: "Username already taken" }, { status: 400 });
   }
 
   const hashed = await bcrypt.hash(password, 10);
-  await User.create({ username: username.toLowerCase(), password: hashed });
+  await sql`INSERT INTO users (username, password) VALUES (${username.toLowerCase()}, ${hashed})`;
 
   return NextResponse.json({ message: "Account created successfully" });
 }

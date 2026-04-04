@@ -1,8 +1,7 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import connectDB from "./db";
-import User from "@/models/User";
+import { sql, ensureSchema } from "./db";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -14,12 +13,16 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.username || !credentials?.password) return null;
-        await connectDB();
-        const user = await User.findOne({ username: credentials.username.toLowerCase() });
+        await ensureSchema();
+        const result = await sql`
+          SELECT id, username, password FROM users
+          WHERE username = ${credentials.username.toLowerCase()}
+        `;
+        const user = result.rows[0];
         if (!user) return null;
         const valid = await bcrypt.compare(credentials.password, user.password);
         if (!valid) return null;
-        return { id: user._id.toString(), name: user.username };
+        return { id: user.id, name: user.username };
       },
     }),
   ],

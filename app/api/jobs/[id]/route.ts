@@ -1,14 +1,27 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import connectDB from "@/lib/db";
-import Job from "@/models/Job";
+import { sql, ensureSchema } from "@/lib/db";
 
 function unauthorized() {
   return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 }
 
-// Update a single job (must belong to current user)
+function mapJob(row: Record<string, unknown>) {
+  return {
+    _id: row.id,
+    userId: row.user_id,
+    company: row.company,
+    position: row.position,
+    status: row.status,
+    location: row.location || "",
+    salary: row.salary || "",
+    jobDescription: row.job_description || "",
+    notes: row.notes || "",
+    createdAt: row.created_at,
+  };
+}
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -16,19 +29,31 @@ export async function PUT(
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return unauthorized();
 
-  await connectDB();
   const { id } = await params;
-  const data = await request.json();
-  const job = await Job.findOneAndUpdate(
-    { _id: id, userId: session.user.id },
-    data,
-    { new: true }
-  );
-  if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
-  return NextResponse.json(job);
+  const {
+    company, position, status,
+    location = "", salary = "", jobDescription = "", notes = "",
+  } = await request.json();
+
+  await ensureSchema();
+  const result = await sql`
+    UPDATE jobs
+    SET company          = ${company},
+        position         = ${position},
+        status           = ${status},
+        location         = ${location},
+        salary           = ${salary},
+        job_description  = ${jobDescription},
+        notes            = ${notes}
+    WHERE id = ${id} AND user_id = ${session.user.id}
+    RETURNING *
+  `;
+  if (result.rows.length === 0) {
+    return NextResponse.json({ error: "Job not found" }, { status: 404 });
+  }
+  return NextResponse.json(mapJob(result.rows[0]));
 }
 
-// Delete a single job (must belong to current user)
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -36,9 +61,13 @@ export async function DELETE(
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return unauthorized();
 
-  await connectDB();
   const { id } = await params;
-  const job = await Job.findOneAndDelete({ _id: id, userId: session.user.id });
-  if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
+  await ensureSchema();
+  const result = await sql`
+    DELETE FROM jobs WHERE id = ${id} AND user_id = ${session.user.id} RETURNING id
+  `;
+  if (result.rows.length === 0) {
+    return NextResponse.json({ error: "Job not found" }, { status: 404 });
+  }
   return NextResponse.json({ message: "Job deleted" });
 }

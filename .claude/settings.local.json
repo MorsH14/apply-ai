@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la .env*)",
+      "Bash(mongosh --eval \"db.runCommand\\({ping:1}\\)\" --quiet)",
+      "WebFetch(domain:r.jina.ai)"
+    ]
+  }
+}
