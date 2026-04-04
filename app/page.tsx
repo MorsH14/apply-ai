@@ -23,8 +23,8 @@ const FEATURES = [
     color: 'from-violet-500 to-purple-600',
     bg: 'bg-violet-50',
     iconColor: 'text-violet-600',
-    title: 'Auto-Fix to 90%+',
-    desc: "One click rewrites your resume to target 90%+ ATS compatibility. Every missing keyword is integrated naturally. Every weak bullet is strengthened with real impact.",
+    title: 'Auto-Fix to 95%+',
+    desc: "One click rewrites your resume to target 95%+ ATS compatibility. Every missing keyword is integrated naturally. Every weak bullet is strengthened with real impact.",
   },
   {
     icon: FileText,
@@ -63,7 +63,7 @@ const FEATURES = [
 const STEPS = [
   { n: '01', title: 'Upload your resume', desc: 'Drop a PDF, DOCX, or paste text. Genova reads it once and uses it across every feature.' },
   { n: '02', title: 'Import any job listing', desc: 'Paste a URL from LinkedIn, Greenhouse, Ashby, Workday, or anywhere. Genova extracts the details automatically.' },
-  { n: '03', title: 'Let the AI do the work', desc: 'Score your resume, fix it to 90%+, tailor it, write the cover letter, and prep for the interview — in under a minute.' },
+  { n: '03', title: 'Let the AI do the work', desc: 'Score your resume, fix it to 95%+, tailor it, write the cover letter, and prep for the interview — in under a minute.' },
 ];
 
 const TESTIMONIALS = [
@@ -73,7 +73,7 @@ const TESTIMONIALS = [
 ];
 
 const STATS = [
-  { value: '91%', label: 'Average ATS score after boost' },
+  { value: '95%+', label: 'Target ATS score after boost' },
   { value: '3×', label: 'More callbacks reported' },
   { value: '60s', label: 'To tailor a resume end-to-end' },
 ];
@@ -149,7 +149,7 @@ export default function LandingPage() {
           </h1>
 
           <p className="text-lg sm:text-xl text-slate-400 leading-relaxed max-w-2xl mx-auto mb-10">
-            Genova turns your resume into a targeted weapon. Score your ATS compatibility, auto-fix it to 90%+, tailor it for any role, write the cover letter, and prep for the interview — all in under a minute.
+            Genova turns your resume into a targeted weapon. Score your ATS compatibility, auto-fix it to 95%+, tailor it for any role, write the cover letter, and prep for the interview — all in under a minute.
           </p>
 
           {/* CTAs */}

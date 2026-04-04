@@ -34,11 +34,11 @@ ${Object.entries(atsAnalysis.sections ?? {})
       messages: [
         {
           role: "system",
-          content: `You are a senior resume strategist and ATS optimisation expert. Your task is to rewrite a candidate's resume to score 90%+ against a specific job description while keeping every claim true, specific, and human-sounding. You never fabricate experience, companies, titles, dates, or metrics. You only reframe and strengthen what already exists.`,
+          content: `You are an elite resume strategist and ATS optimisation expert. Your task is to rewrite a candidate's resume to score 95%+ against a specific job description while keeping every claim true, specific, and human-sounding. You never fabricate experience, companies, titles, dates, or metrics. You only reframe and strengthen what already exists. A score below 95% is unacceptable — push keyword density, tighten every bullet, and mirror the JD language precisely.`,
         },
         {
           role: "user",
-          content: `Rewrite this resume to score 90%+ on ATS for the role below. Fix every identified issue and integrate all critical missing keywords naturally.
+          content: `Rewrite this resume to score 95%+ on ATS for the role below. This is a high-bar optimisation — every section must be maximally aligned with the job description. Fix every identified issue and integrate all critical missing keywords naturally.
 
 TARGET ROLE: ${position} at ${company}
 
@@ -51,11 +51,12 @@ ${resume.slice(0, 3500)}
 ${issuesSummary}
 
 OPTIMISATION INSTRUCTIONS:
-1. KEYWORDS: Naturally integrate EVERY critical missing keyword into bullets or skills. Use exact phrasing from the JD where possible (ATS does literal string matching).
-2. SUMMARY: Rewrite the opening summary to mirror the job title and top 3 requirements from the JD directly. Open with seniority + top skill + biggest relevant achievement.
-3. EXPERIENCE: Strengthen every weak bullet — add action verb + outcome + scale. If a metric doesn't exist, describe real scope (team size, project scale, technology used).
-4. FORMAT: Use clean ATS-parseable headers. No tables, no columns.
-5. TARGET: Every section should score 90%+ individually.
+1. KEYWORDS: Integrate EVERY critical missing keyword AND every important secondary keyword from the JD into bullets or skills. Use exact phrasing from the JD (ATS does literal string matching). Aim for 95%+ keyword coverage.
+2. SUMMARY: Rewrite the opening summary to mirror the exact job title and top 4–5 requirements from the JD. Open with seniority + top skill + biggest relevant achievement. Include 2–3 high-value keywords in the first sentence.
+3. EXPERIENCE: Rewrite every bullet — strong action verb + quantified or descriptive outcome + technology/scale. Align each role's language closely with the JD. No vague bullets allowed.
+4. SKILLS: List every relevant skill from the JD that the candidate has, grouped by category. Include tools, frameworks, methodologies, and soft skills mentioned in the JD.
+5. FORMAT: Use clean ATS-parseable section headers. No tables, no columns, no graphics.
+6. TARGET: Every section must individually score 95%+. Keyword section must hit 35/35.
 
 OUTPUT FORMAT — follow this exact structure:
 

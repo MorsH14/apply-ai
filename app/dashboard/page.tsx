@@ -1271,7 +1271,7 @@ export default function Home() {
                                   >
                                     {atsBoostLoading
                                       ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Rewriting…</>
-                                      : <><Sparkles size={15} />Auto-Fix to 90%+ — Rewrite Resume</>
+                                      : <><Sparkles size={15} />Auto-Fix to 95%+ — Rewrite Resume</>
                                     }
                                   </button>
 
@@ -1282,7 +1282,7 @@ export default function Home() {
                                         <div className="flex items-center gap-2">
                                           <Sparkles size={13} className="text-violet-600" />
                                           <span className="text-sm font-bold text-violet-900">Optimised Resume</span>
-                                          <span className="text-[10px] font-bold bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-md">Target 90%+</span>
+                                          <span className="text-[10px] font-bold bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-md">Target 95%+</span>
                                         </div>
                                         <div className="flex items-center gap-1.5">
                                           <button onClick={() => copyToClipboard(atsBoostResult)} className="flex items-center gap-1.5 text-xs text-violet-600 hover:text-violet-800 bg-white border border-violet-200 px-2.5 py-1.5 rounded-lg font-semibold transition-colors">
