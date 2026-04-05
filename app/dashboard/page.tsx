@@ -488,18 +488,22 @@ export default function Home() {
                 <span className="font-medium">{session.user.name}</span>
               </div>
             )}
+            {/* ATS Score — icon-only on mobile, labeled on sm+ */}
             <Link
               href="/ats-score"
-              className="hidden sm:flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-semibold transition-colors"
+              title="ATS Score"
+              className="flex items-center gap-1.5 px-2.5 py-2 sm:px-3.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-semibold transition-colors"
             >
-              <Target size={13} />ATS Score
+              <Target size={13} />
+              <span className="hidden sm:inline">ATS Score</span>
             </Link>
+            {/* Add Job — icon-only on mobile, labeled on sm+ */}
             <button
               onClick={() => { setShowAddForm(!showAddForm); setEditingId(null); setImportUrl(''); setImportError(null); }}
-              className="flex items-center gap-1.5 bg-linear-to-r from-blue-600 to-violet-600 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-violet-700 transition-all shadow-sm shadow-blue-500/20"
+              className="flex items-center gap-1.5 bg-linear-to-r from-blue-600 to-violet-600 text-white px-2.5 py-2 sm:px-4 rounded-xl text-sm font-semibold hover:from-blue-700 hover:to-violet-700 transition-all shadow-sm shadow-blue-500/20"
             >
               <Plus size={15} strokeWidth={2.5} />
-              Add Job
+              <span className="hidden sm:inline">Add Job</span>
             </button>
             <button
               onClick={() => signOut({ callbackUrl: '/login' })}
