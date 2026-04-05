@@ -88,7 +88,7 @@ export default function LandingPage() {
 
       {/* ── Nav ────────────────────────────────────────────────────────────── */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-200/60">
-        <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white font-black text-sm shadow-sm">
               G
@@ -133,7 +133,7 @@ export default function LandingPage() {
           <div className="absolute bottom-0 left-1/2 w-[400px] h-[400px] bg-indigo-600/8 rounded-full blur-3xl translate-y-1/3 -translate-x-1/2" />
         </div>
 
-        <div className="relative max-w-4xl mx-auto px-5 text-center">
+        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           {/* Badge */}
           <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-1.5 mb-8">
             <Zap size={12} className="text-amber-400" />
@@ -141,7 +141,7 @@ export default function LandingPage() {
           </div>
 
           {/* Headline */}
-          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white leading-[1.05] mb-6">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black tracking-tight text-white leading-[1.05] mb-6">
             Apply smarter.{' '}
             <span className="bg-gradient-to-r from-blue-400 via-violet-400 to-purple-400 bg-clip-text text-transparent">
               Land faster.
@@ -153,7 +153,7 @@ export default function LandingPage() {
           </p>
 
           {/* CTAs */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-16">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 mb-12 sm:mb-16">
             <Link
               href="/login"
               className="group flex items-center gap-2 bg-gradient-to-r from-blue-500 to-violet-600 text-white px-8 py-3.5 rounded-2xl text-base font-bold hover:from-blue-600 hover:to-violet-700 transition-all shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40"
@@ -170,7 +170,7 @@ export default function LandingPage() {
           </div>
 
           {/* Stats row */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-8 sm:gap-12">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-8 md:gap-12">
             {STATS.map(s => (
               <div key={s.value} className="text-center">
                 <div className="text-3xl font-black text-white">{s.value}</div>
@@ -181,7 +181,7 @@ export default function LandingPage() {
         </div>
 
         {/* App mockup */}
-        <div className="relative max-w-4xl mx-auto px-5 mt-20">
+        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 mt-20">
           <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden shadow-2xl shadow-black/50">
             {/* Browser chrome */}
             <div className="flex items-center gap-1.5 px-4 py-3 bg-white/5 border-b border-white/10">
@@ -201,8 +201,8 @@ export default function LandingPage() {
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Application Pipeline</span>
                   <span className="text-[11px] text-slate-500">12 total</span>
                 </div>
-                <div className="grid grid-cols-5 gap-2 mb-3">
-                  {[['3','Saved','text-sky-400'],['5','Applied','text-amber-400'],['2','Interview','text-violet-400'],['1','Offer','text-emerald-400'],['1','Rejected','text-rose-400']].map(([n, l, c]) => (
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-3">
+                  {[['3', 'Saved', 'text-sky-400'], ['5', 'Applied', 'text-amber-400'], ['2', 'Interview', 'text-violet-400'], ['1', 'Offer', 'text-emerald-400'], ['1', 'Rejected', 'text-rose-400']].map(([n, l, c]) => (
                     <div key={l} className="text-center">
                       <div className={`text-lg font-black ${c}`}>{n}</div>
                       <div className="text-[9px] text-slate-500 font-semibold">{l}</div>
@@ -210,7 +210,7 @@ export default function LandingPage() {
                   ))}
                 </div>
                 <div className="space-y-1.5">
-                  {[['bg-sky-500',25],['bg-amber-500',42],['bg-violet-500',17],['bg-emerald-500',8],['bg-rose-500',8]].map(([c, w], i) => (
+                  {[['bg-sky-500', 25], ['bg-amber-500', 42], ['bg-violet-500', 17], ['bg-emerald-500', 8], ['bg-rose-500', 8]].map(([c, w], i) => (
                     <div key={i} className="flex items-center gap-2">
                       <div className="flex-1 h-1 bg-white/5 rounded-full">
                         <div className={`h-full rounded-full ${c}`} style={{ width: `${w}%` }} />
@@ -246,7 +246,7 @@ export default function LandingPage() {
 
       {/* ── Features ───────────────────────────────────────────────────────── */}
       <section className="py-24 bg-white">
-        <div className="max-w-6xl mx-auto px-5">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <div className="inline-flex items-center gap-2 bg-slate-100 rounded-full px-4 py-1.5 mb-5">
               <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">Everything you need</span>
@@ -276,7 +276,7 @@ export default function LandingPage() {
 
       {/* ── How it works ───────────────────────────────────────────────────── */}
       <section className="py-24 bg-slate-50">
-        <div className="max-w-5xl mx-auto px-5">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-black text-slate-900 tracking-tight">From resume to offer.<br />Faster than you think.</h2>
             <p className="text-lg text-slate-500 mt-4">Three steps. Under a minute. Dramatically better results.</p>
@@ -302,7 +302,7 @@ export default function LandingPage() {
 
       {/* ── Testimonials ───────────────────────────────────────────────────── */}
       <section className="py-24 bg-white">
-        <div className="max-w-5xl mx-auto px-5">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-14">
             <h2 className="text-4xl font-black text-slate-900 tracking-tight">Real people. Real results.</h2>
           </div>
@@ -327,7 +327,7 @@ export default function LandingPage() {
 
       {/* ── CTA banner ─────────────────────────────────────────────────────── */}
       <section className="py-24 bg-slate-950">
-        <div className="max-w-3xl mx-auto px-5 text-center">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] bg-blue-600/10 rounded-full blur-3xl" />
           </div>
@@ -354,7 +354,7 @@ export default function LandingPage() {
 
       {/* ── Footer ─────────────────────────────────────────────────────────── */}
       <footer className="bg-slate-950 border-t border-white/5 py-10">
-        <div className="max-w-6xl mx-auto px-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center text-white font-black text-xs">
               G
