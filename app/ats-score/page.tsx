@@ -6,36 +6,52 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import {
   Target, Sparkles, AlertCircle, Check, ArrowLeft, FileText,
-  Download, Copy, RotateCcw, Upload,
+  Download, Copy, RotateCcw, ChevronDown, ChevronUp, TrendingUp,
 } from 'lucide-react';
 
 const TemplatePickerModal = dynamic(() => import('@/components/TemplatePickerModal'), { ssr: false });
 
-type AtsSection = { score: number; issue: string | null; fix: string | null };
+type AtsSection = { score: number; max: number; issue: string | null; fix: string | null };
+type AtsImprovement = { category: string; text: string; priority: 'high' | 'medium' | 'low' };
 type AtsScoreResult = {
   score: number;
   grade: string;
   verdict: string;
   ready_to_apply: boolean;
-  sections: { keywords: AtsSection; experience: AtsSection; summary: AtsSection; format: AtsSection };
+  mode: 'general' | 'targeted';
+  sections: Record<string, AtsSection>;
   critical_missing: string[];
   matched: string[];
+  improvements: AtsImprovement[];
+  strengths: string[];
   top_fix: string;
 };
 
 type TemplateModalState = { content: string; type: 'resume' | 'cover'; company: string; position: string } | null;
 
-const gradeStyle: Record<string, string> = {
-  A: 'bg-emerald-100 text-emerald-700',
-  B: 'bg-blue-100 text-blue-700',
-  C: 'bg-amber-100 text-amber-700',
-  D: 'bg-orange-100 text-orange-700',
-  F: 'bg-rose-100 text-rose-700',
+const gradeStyle: Record<string, { bg: string; text: string; ring: string }> = {
+  A: { bg: 'bg-emerald-50',  text: 'text-emerald-700', ring: 'ring-emerald-200' },
+  B: { bg: 'bg-blue-50',    text: 'text-blue-700',    ring: 'ring-blue-200'    },
+  C: { bg: 'bg-amber-50',   text: 'text-amber-700',   ring: 'ring-amber-200'   },
+  D: { bg: 'bg-orange-50',  text: 'text-orange-700',  ring: 'ring-orange-200'  },
+  F: { bg: 'bg-rose-50',    text: 'text-rose-700',    ring: 'ring-rose-200'    },
 };
-const sectionMax: Record<string, number> = { keywords: 35, experience: 30, summary: 20, format: 15 };
 
-function scoreColor(n: number) { return n >= 90 ? 'text-emerald-600' : n >= 72 ? 'text-blue-600' : n >= 55 ? 'text-amber-500' : 'text-rose-500'; }
-function barColor(n: number) { return n >= 90 ? 'bg-emerald-500' : n >= 72 ? 'bg-blue-500' : n >= 55 ? 'bg-amber-400' : 'bg-rose-400'; }
+const priorityStyle = {
+  high:   { badge: 'bg-rose-50 text-rose-600 border-rose-200',   dot: 'bg-rose-400'   },
+  medium: { badge: 'bg-amber-50 text-amber-600 border-amber-200', dot: 'bg-amber-400' },
+  low:    { badge: 'bg-blue-50 text-blue-600 border-blue-200',    dot: 'bg-blue-400'  },
+};
+
+function scoreColor(n: number) {
+  return n >= 90 ? 'text-emerald-600' : n >= 72 ? 'text-blue-600' : n >= 55 ? 'text-amber-500' : 'text-rose-500';
+}
+function barColor(n: number) {
+  return n >= 90 ? 'bg-emerald-500' : n >= 72 ? 'bg-blue-500' : n >= 55 ? 'bg-amber-400' : 'bg-rose-400';
+}
+function sectionPct(sec: AtsSection) {
+  return Math.round((sec.score / (sec.max || 1)) * 100);
+}
 
 const INPUT = 'w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors';
 
@@ -43,6 +59,7 @@ export default function AtsScorePage() {
   const { data: session } = useSession();
 
   const [myResume, setMyResume] = useState('');
+  const [showJD, setShowJD] = useState(false);
   const [jobDescription, setJD] = useState('');
   const [company, setCompany] = useState('');
   const [position, setPosition] = useState('');
@@ -73,7 +90,7 @@ export default function AtsScorePage() {
 
   const runScore = async (resumeOverride?: string) => {
     const resumeToUse = resumeOverride ?? myResume;
-    if (!resumeToUse || !jobDescription) return;
+    if (!resumeToUse) return;
     setAtsLoading(true);
     setAtsError(null);
     setAtsScore(null);
@@ -83,7 +100,10 @@ export default function AtsScorePage() {
       const res = await fetch('/api/ai/ats-score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobDescription, resume: resumeToUse }),
+        body: JSON.stringify({
+          resume: resumeToUse,
+          jobDescription: showJD ? jobDescription : '',
+        }),
       });
       const data = await res.json();
       if (!res.ok) setAtsError(data.error || 'Analysis failed');
@@ -144,6 +164,10 @@ export default function AtsScorePage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const highImprovements = atsScore?.improvements?.filter(i => i.priority === 'high') ?? [];
+  const medImprovements  = atsScore?.improvements?.filter(i => i.priority === 'medium') ?? [];
+  const lowImprovements  = atsScore?.improvements?.filter(i => i.priority === 'low') ?? [];
+
   return (
     <div className="min-h-screen bg-slate-50">
       {templateModal && (
@@ -175,7 +199,7 @@ export default function AtsScorePage() {
               <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
                 <Target size={14} className="text-blue-600" />
               </div>
-              <span className="font-semibold text-slate-900 text-sm">ATS Score Checker</span>
+              <span className="font-semibold text-slate-900 text-sm">Resume Score</span>
             </div>
           </div>
           {session?.user?.name && (
@@ -193,9 +217,9 @@ export default function AtsScorePage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
           {/* ── Left: Inputs ── */}
-          <div className="space-y-5">
+          <div className="space-y-4">
 
-            {/* Step 1: Resume */}
+            {/* Resume card */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
                 <div className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0">1</div>
@@ -240,189 +264,269 @@ export default function AtsScorePage() {
               </div>
             </div>
 
-            {/* Step 2: Job Details */}
+            {/* Optional JD toggle */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
-                <div className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0">2</div>
-                <span className="font-semibold text-slate-900 text-sm">Job Details</span>
-              </div>
-              <div className="p-5 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Position <span className="text-slate-400 font-normal">(optional)</span></label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Software Engineer"
-                      value={position}
-                      onChange={e => setPosition(e.target.value)}
-                      className={INPUT}
-                    />
+              <button
+                onClick={() => setShowJD(v => !v)}
+                className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-slate-50 transition-colors"
+              >
+                <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-500 text-xs font-bold flex items-center justify-center shrink-0">2</div>
+                <div className="flex-1">
+                  <span className="font-semibold text-slate-900 text-sm">Compare to a job</span>
+                  <span className="ml-2 text-[11px] font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-md">Optional</span>
+                </div>
+                <span className="text-[11px] text-slate-400 mr-1">
+                  {showJD ? 'Hide' : 'Add job description for targeted scoring'}
+                </span>
+                {showJD ? <ChevronUp size={14} className="text-slate-400 shrink-0" /> : <ChevronDown size={14} className="text-slate-400 shrink-0" />}
+              </button>
+
+              {showJD && (
+                <div className="px-5 pb-5 space-y-3 border-t border-slate-100 pt-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1.5">Position</label>
+                      <input type="text" placeholder="e.g. Software Engineer" value={position} onChange={e => setPosition(e.target.value)} className={INPUT} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-1.5">Company</label>
+                      <input type="text" placeholder="e.g. Stripe" value={company} onChange={e => setCompany(e.target.value)} className={INPUT} />
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Company <span className="text-slate-400 font-normal">(optional)</span></label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Stripe"
-                      value={company}
-                      onChange={e => setCompany(e.target.value)}
-                      className={INPUT}
+                    <label className="block text-xs font-medium text-slate-600 mb-1.5">Job Description</label>
+                    <textarea
+                      value={jobDescription}
+                      onChange={e => setJD(e.target.value)}
+                      placeholder="Paste the full job description here…"
+                      rows={7}
+                      className="w-full bg-slate-50/60 border border-slate-200 rounded-xl px-3.5 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors resize-none"
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Job Description <span className="text-rose-400">*</span></label>
-                  <textarea
-                    value={jobDescription}
-                    onChange={e => setJD(e.target.value)}
-                    placeholder="Paste the full job description here…"
-                    rows={8}
-                    className="w-full bg-slate-50/60 border border-slate-200 rounded-xl px-3.5 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors resize-none"
-                  />
+              )}
+            </div>
+
+            {/* Analyze CTA */}
+            <div className="space-y-2">
+              {atsError && (
+                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5">
+                  <AlertCircle size={14} className="shrink-0" />
+                  {atsError}
                 </div>
-
-                {atsError && (
-                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3.5 py-2.5">
-                    <AlertCircle size={14} className="shrink-0" />
-                    {atsError}
-                  </div>
-                )}
-
-                <button
-                  onClick={() => runScore()}
-                  disabled={!myResume || !jobDescription || atsLoading}
-                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-violet-600 text-white py-3 rounded-xl text-sm font-bold hover:from-blue-700 hover:to-violet-700 disabled:opacity-40 transition-all shadow-sm shadow-blue-500/20"
-                >
-                  {atsLoading
-                    ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Analysing…</>
-                    : <><Target size={15} />Check ATS Score</>
-                  }
-                </button>
-                {!myResume && (
-                  <p className="text-xs text-amber-600 text-center">Add your resume in the Dashboard to get started</p>
-                )}
-              </div>
+              )}
+              <button
+                onClick={() => runScore()}
+                disabled={!myResume || atsLoading}
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-violet-600 text-white py-3.5 rounded-xl text-sm font-bold hover:from-blue-700 hover:to-violet-700 disabled:opacity-40 transition-all shadow-sm shadow-blue-500/20"
+              >
+                {atsLoading
+                  ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Analysing resume…</>
+                  : <><Target size={15} />Scan My Resume</>
+                }
+              </button>
+              {!myResume && (
+                <p className="text-xs text-amber-600 text-center">Add your resume in the Dashboard to get started</p>
+              )}
             </div>
           </div>
 
           {/* ── Right: Results ── */}
-          <div className="space-y-5">
+          <div className="space-y-4">
 
             {/* Placeholder */}
             {!atsScore && !atsLoading && (
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center justify-center py-16 text-center px-6">
                 <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-4">
-                  <Target size={24} className="text-blue-500" />
+                  <Target size={24} className="text-blue-400" />
                 </div>
                 <p className="text-base font-semibold text-slate-700">Your score will appear here</p>
                 <p className="text-sm text-slate-400 mt-1.5 max-w-xs leading-relaxed">
-                  Paste a job description and click "Check ATS Score" to see how your resume performs.
+                  Click &quot;Scan My Resume&quot; to get your score and a personalised improvement plan.
                 </p>
               </div>
             )}
 
-            {/* Score result */}
             {atsScore && (() => {
               const s = atsScore;
+              const gs = gradeStyle[s.grade] ?? { bg: 'bg-slate-50', text: 'text-slate-600', ring: 'ring-slate-200' };
+
               return (
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <>
                   {/* Score hero */}
-                  <div className="p-6 border-b border-slate-100">
-                    <div className="flex items-center gap-5 mb-4">
-                      <div className="flex items-baseline gap-0.5">
-                        <span className={`text-6xl font-black tabular-nums ${scoreColor(s.score)}`}>{s.score}</span>
-                        <span className={`text-2xl font-bold ${scoreColor(s.score)}`}>%</span>
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className={`text-sm font-bold px-3 py-1 rounded-lg ${gradeStyle[s.grade] ?? 'bg-slate-100 text-slate-600'}`}>
-                            Grade {s.grade}
-                          </span>
-                          <span className={`text-sm font-semibold ${s.ready_to_apply ? 'text-emerald-600' : 'text-amber-600'}`}>
-                            {s.ready_to_apply ? '✓ Ready to apply' : '⚠ Needs work'}
-                          </span>
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-6">
+                      <div className="flex items-center gap-5 mb-4">
+                        <div className="flex items-baseline gap-0.5">
+                          <span className={`text-6xl font-black tabular-nums ${scoreColor(s.score)}`}>{s.score}</span>
+                          <span className={`text-2xl font-bold ${scoreColor(s.score)}`}>/100</span>
                         </div>
-                        <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full transition-all duration-700 ${barColor(s.score)}`} style={{ width: `${s.score}%` }} />
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className={`text-sm font-bold px-3 py-1 rounded-lg ring-1 ${gs.bg} ${gs.text} ${gs.ring}`}>
+                              Grade {s.grade}
+                            </span>
+                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${s.ready_to_apply ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                              {s.ready_to_apply ? '✓ Strong resume' : '⚠ Needs work'}
+                            </span>
+                          </div>
+                          <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all duration-700 ${barColor(s.score)}`} style={{ width: `${s.score}%` }} />
+                          </div>
                         </div>
                       </div>
+                      <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
+                        {s.verdict}
+                      </p>
+                      {s.mode === 'targeted' && (
+                        <p className="mt-2 text-[11px] text-blue-600 font-medium flex items-center gap-1">
+                          <Target size={10} />Scored against job description
+                        </p>
+                      )}
                     </div>
-                    <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
-                      {s.verdict}
-                    </p>
                   </div>
 
+                  {/* Strengths */}
+                  {s.strengths?.length > 0 && (
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+                        <TrendingUp size={14} className="text-emerald-600" />
+                        <p className="text-sm font-semibold text-slate-800">What&apos;s Working</p>
+                      </div>
+                      <div className="p-5 space-y-2">
+                        {s.strengths.map((str, i) => (
+                          <div key={i} className="flex items-start gap-2.5">
+                            <div className="w-4 h-4 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0 mt-0.5">
+                              <Check size={9} className="text-emerald-600" strokeWidth={3} />
+                            </div>
+                            <p className="text-sm text-slate-700 leading-snug">{str}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Section breakdown */}
-                  <div className="p-5 space-y-4 border-b border-slate-100">
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Section Breakdown</p>
-                    <div className="grid grid-cols-2 gap-2.5">
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-100">
+                      <p className="text-sm font-semibold text-slate-800">Score Breakdown</p>
+                    </div>
+                    <div className="p-5 grid grid-cols-2 gap-2.5">
                       {(Object.entries(s.sections) as [string, AtsSection][]).map(([key, sec]) => {
-                        const max = sectionMax[key] ?? 25;
-                        const pct = Math.round((sec.score / max) * 100);
+                        const pct = sectionPct(sec);
                         const cls = pct >= 80 ? 'bg-emerald-50 border-emerald-200' : pct >= 60 ? 'bg-amber-50 border-amber-200' : 'bg-rose-50 border-rose-200';
                         const numCls = pct >= 80 ? 'text-emerald-700' : pct >= 60 ? 'text-amber-600' : 'text-rose-600';
+                        const barCls = pct >= 80 ? 'bg-emerald-400' : pct >= 60 ? 'bg-amber-400' : 'bg-rose-400';
                         return (
                           <div key={key} className={`rounded-xl p-3.5 border ${cls}`}>
-                            <div className={`text-2xl font-black ${numCls}`}>{pct}%</div>
-                            <div className="text-xs font-bold text-slate-600 capitalize mt-0.5 mb-1">{key}</div>
-                            {sec.issue && <div className="text-[11px] text-slate-500 leading-tight">{sec.issue}</div>}
-                            {sec.fix && <div className="text-[11px] text-blue-600 leading-tight mt-1">{sec.fix}</div>}
+                            <div className="flex items-baseline justify-between mb-1.5">
+                              <span className="text-xs font-bold text-slate-600 capitalize">{key}</span>
+                              <span className={`text-lg font-black ${numCls}`}>{pct}%</span>
+                            </div>
+                            <div className="h-1.5 bg-white/60 rounded-full overflow-hidden mb-2">
+                              <div className={`h-full rounded-full ${barCls}`} style={{ width: `${pct}%` }} />
+                            </div>
+                            {sec.issue && <p className="text-[11px] text-slate-500 leading-tight">{sec.issue}</p>}
                           </div>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* Top fix */}
-                  {s.top_fix && (
-                    <div className="px-5 py-4 border-b border-slate-100">
-                      <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-3">
-                        <AlertCircle size={14} className="text-amber-600 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-[11px] font-bold text-amber-800 uppercase tracking-wide mb-0.5">Top Fix</p>
-                          <p className="text-xs text-amber-700 leading-relaxed">{s.top_fix}</p>
-                        </div>
+                  {/* Improvements */}
+                  {(highImprovements.length + medImprovements.length + lowImprovements.length) > 0 && (
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                        <p className="text-sm font-semibold text-slate-800">Improvements</p>
+                        <span className="text-[11px] font-medium text-slate-400">
+                          {highImprovements.length + medImprovements.length + lowImprovements.length} suggestions
+                        </span>
+                      </div>
+                      <div className="p-5 space-y-3">
+                        {[
+                          { label: 'High Priority', items: highImprovements, p: 'high' as const },
+                          { label: 'Medium Priority', items: medImprovements, p: 'medium' as const },
+                          { label: 'Low Priority', items: lowImprovements, p: 'low' as const },
+                        ].filter(g => g.items.length > 0).map(group => (
+                          <div key={group.p}>
+                            <p className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${
+                              group.p === 'high' ? 'text-rose-500' : group.p === 'medium' ? 'text-amber-500' : 'text-blue-500'
+                            }`}>{group.label}</p>
+                            <div className="space-y-2">
+                              {group.items.map((imp, i) => (
+                                <div key={i} className="flex items-start gap-2.5 rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-2.5">
+                                  <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${priorityStyle[imp.priority].dot}`} />
+                                  <div className="flex-1 min-w-0">
+                                    <span className={`inline-flex text-[10px] font-bold border px-1.5 py-0.5 rounded-md mr-1.5 ${priorityStyle[imp.priority].badge}`}>
+                                      {imp.category}
+                                    </span>
+                                    <span className="text-xs text-slate-700 leading-snug">{imp.text}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Keywords */}
-                  <div className="p-5 space-y-4 border-b border-slate-100">
-                    {s.critical_missing.length > 0 && (
+                  {/* Top fix */}
+                  {s.top_fix && (
+                    <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3.5">
+                      <AlertCircle size={15} className="text-amber-600 shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Missing Keywords</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {s.critical_missing.map(w => (
-                            <span key={w} className="text-[11px] font-semibold bg-rose-50 text-rose-600 border border-rose-200 px-2.5 py-1 rounded-lg">{w}</span>
-                          ))}
-                        </div>
+                        <p className="text-[11px] font-bold text-amber-800 uppercase tracking-wide mb-0.5">Top Fix</p>
+                        <p className="text-sm text-amber-700 leading-relaxed">{s.top_fix}</p>
                       </div>
-                    )}
-                    {s.matched.length > 0 && (
-                      <div>
-                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Matched Keywords</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {s.matched.map(w => (
-                            <span key={w} className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg">{w}</span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
-                  {/* Boost CTA */}
-                  <div className="p-5">
+                  {/* Targeted mode: keyword pills */}
+                  {s.mode === 'targeted' && (s.critical_missing.length > 0 || s.matched.length > 0) && (
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="px-5 py-4 border-b border-slate-100">
+                        <p className="text-sm font-semibold text-slate-800">Keyword Match</p>
+                      </div>
+                      <div className="p-5 space-y-4">
+                        {s.critical_missing.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-bold text-rose-500 uppercase tracking-widest mb-2">Missing</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {s.critical_missing.map(w => (
+                                <span key={w} className="text-[11px] font-semibold bg-rose-50 text-rose-600 border border-rose-200 px-2.5 py-1 rounded-lg">{w}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {s.matched.length > 0 && (
+                          <div>
+                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-2">Matched</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {s.matched.map(w => (
+                                <span key={w} className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg">{w}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Boost CTA — targeted mode only */}
+                  {s.mode === 'targeted' && (
                     <button
                       onClick={runBoost}
                       disabled={boostLoading}
-                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white py-3 rounded-xl text-sm font-bold hover:from-violet-700 hover:to-indigo-700 disabled:opacity-50 transition-all shadow-sm shadow-violet-500/20"
+                      className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 text-white py-3.5 rounded-xl text-sm font-bold hover:from-violet-700 hover:to-indigo-700 disabled:opacity-50 transition-all shadow-sm shadow-violet-500/20"
                     >
                       {boostLoading
                         ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Rewriting resume…</>
                         : <><Sparkles size={15} />Auto-Fix to 95%+ — Rewrite Resume</>
                       }
                     </button>
-                  </div>
-                </div>
+                  )}
+                </>
               );
             })()}
 
@@ -455,7 +559,6 @@ export default function AtsScorePage() {
                   {boostResult}
                 </pre>
 
-                {/* Save + Re-score */}
                 <div className="px-5 py-4 border-t border-violet-100 bg-violet-50/50 space-y-2">
                   <p className="text-xs text-slate-500 leading-relaxed">
                     Replace your saved resume with this optimised version, then re-score to confirm the improvement.
