@@ -3,15 +3,20 @@ import Groq from "groq-sdk";
 import { handleAiError } from "@/lib/ai-error";
 
 export async function POST(request: Request) {
-  const { resume, improvement, category } = await request.json();
+  const { resume, improvements } = await request.json();
 
   if (!process.env.GROQ_API_KEY) {
     return NextResponse.json({ error: "GROQ_API_KEY is not set" }, { status: 500 });
   }
 
-  if (!resume || !improvement) {
-    return NextResponse.json({ error: "Resume and improvement are required" }, { status: 400 });
+  if (!resume || !improvements?.length) {
+    return NextResponse.json({ error: "Resume and improvements are required" }, { status: 400 });
   }
+
+  const isSingle = improvements.length === 1;
+  const improvementList = improvements
+    .map((imp: { category: string; text: string }, i: number) => `${i + 1}. [${imp.category}] ${imp.text}`)
+    .join("\n");
 
   try {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -21,23 +26,24 @@ export async function POST(request: Request) {
       messages: [
         {
           role: "system",
-          content: `You are a precise resume editor. Your job is to apply one specific improvement to a resume while keeping everything else exactly as-is. Do not rewrite unrelated sections, change the structure, add new content, or alter information you were not asked to touch. Make the minimum targeted edits needed to address the improvement. Never fabricate experience, companies, dates, titles, or metrics.`,
+          content: `You are an expert resume editor. Apply the requested improvements thoroughly and confidently. Each improvement must be fully addressed — not superficially touched. Only edit the sections relevant to each improvement. Never fabricate experience, companies, dates, titles, or metrics. Never add commentary or preamble to your output.`,
         },
         {
           role: "user",
-          content: `Apply this specific improvement to the resume below.
+          content: `Apply ${isSingle ? "this improvement" : "all of these improvements"} to the resume below. Each must be fully addressed — make the changes count.
 
-IMPROVEMENT TO APPLY (${category}):
-${improvement}
+${isSingle ? "IMPROVEMENT TO APPLY:" : "IMPROVEMENTS TO APPLY:"}
+${improvementList}
 
 CURRENT RESUME:
 ${resume.slice(0, 4500)}
 
-INSTRUCTIONS:
-- Edit only what is needed to address the improvement above
-- Keep all other content, formatting, and structure exactly the same
-- Do not add commentary, preamble, or explanations
-- Return ONLY the full updated resume text`,
+RULES:
+- Fully address every improvement listed — don't make superficial edits
+- Only change sections relevant to each improvement; leave the rest exactly as-is
+- Keep the same formatting structure and section order
+- Never fabricate names, companies, dates, titles, or metrics
+- Return ONLY the complete updated resume text — no commentary`,
         },
       ],
       max_tokens: 4096,

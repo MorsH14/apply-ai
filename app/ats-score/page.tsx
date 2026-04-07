@@ -73,8 +73,10 @@ export default function AtsScorePage() {
 
   const [fixResult, setFixResult] = useState<string | null>(null);
   const [fixingItem, setFixingItem] = useState<AtsImprovement | null>(null);
+  const [fixingAll, setFixingAll] = useState(false);
   const [fixSaved, setFixSaved] = useState(false);
   const [fixSaving, setFixSaving] = useState(false);
+  const [prevScore, setPrevScore] = useState<number | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -98,6 +100,7 @@ export default function AtsScorePage() {
     if (!resumeToUse) return;
     setAtsLoading(true);
     setAtsError(null);
+    setPrevScore(atsScore?.score ?? null);
     setAtsScore(null);
     setBoostResult(null);
     setSaved(false);
@@ -141,9 +144,9 @@ export default function AtsScorePage() {
     }
   };
 
-  const runFix = async (imp: AtsImprovement) => {
+  const applyFix = async (improvements: AtsImprovement[], single?: AtsImprovement) => {
     if (!myResume) return;
-    setFixingItem(imp);
+    if (single) setFixingItem(single); else setFixingAll(true);
     setFixResult(null);
     setFixSaved(false);
     setAtsError(null);
@@ -151,7 +154,7 @@ export default function AtsScorePage() {
       const res = await fetch('/api/ai/resume-fix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resume: myResume, improvement: imp.text, category: imp.category }),
+        body: JSON.stringify({ resume: myResume, improvements }),
       });
       const data = await res.json();
       if (!res.ok) setAtsError(data.error || 'Fix failed');
@@ -160,8 +163,12 @@ export default function AtsScorePage() {
       setAtsError('Network error — please try again.');
     } finally {
       setFixingItem(null);
+      setFixingAll(false);
     }
   };
+
+  const runFix = (imp: AtsImprovement) => applyFix([imp], imp);
+  const runFixAll = () => applyFix([...highImprovements, ...medImprovements, ...lowImprovements]);
 
   const saveFixAsResume = async () => {
     if (!fixResult) return;
@@ -398,9 +405,20 @@ export default function AtsScorePage() {
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="p-6">
                       <div className="flex items-center gap-5 mb-4">
-                        <div className="flex items-baseline gap-0.5">
-                          <span className={`text-6xl font-black tabular-nums ${scoreColor(s.score)}`}>{s.score}</span>
-                          <span className={`text-2xl font-bold ${scoreColor(s.score)}`}>/100</span>
+                        <div className="flex flex-col items-center">
+                          <div className="flex items-baseline gap-0.5">
+                            <span className={`text-6xl font-black tabular-nums ${scoreColor(s.score)}`}>{s.score}</span>
+                            <span className={`text-2xl font-bold ${scoreColor(s.score)}`}>/100</span>
+                          </div>
+                          {prevScore !== null && prevScore !== s.score && (
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full mt-1 ${
+                              s.score > prevScore
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-rose-100 text-rose-600'
+                            }`}>
+                              {s.score > prevScore ? `+${s.score - prevScore}` : `${s.score - prevScore}`} pts
+                            </span>
+                          )}
                         </div>
                         <div className="flex-1 space-y-2">
                           <div className="flex items-center justify-between">
@@ -477,11 +495,23 @@ export default function AtsScorePage() {
                   {/* Improvements */}
                   {(highImprovements.length + medImprovements.length + lowImprovements.length) > 0 && (
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                        <p className="text-sm font-semibold text-slate-800">Improvements</p>
-                        <span className="text-[11px] font-medium text-slate-400">
-                          {highImprovements.length + medImprovements.length + lowImprovements.length} suggestions
-                        </span>
+                      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">Improvements</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            {highImprovements.length + medImprovements.length + lowImprovements.length} suggestions
+                          </p>
+                        </div>
+                        <button
+                          onClick={runFixAll}
+                          disabled={fixingAll || !!fixingItem}
+                          className="flex items-center gap-1.5 text-xs font-bold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 shrink-0 shadow-sm shadow-violet-500/20"
+                        >
+                          {fixingAll
+                            ? <><div className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />Fixing all…</>
+                            : <><Wand2 size={11} />Fix All</>
+                          }
+                        </button>
                       </div>
                       <div className="p-5 space-y-3">
                         {[
