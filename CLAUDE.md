@@ -14,7 +14,7 @@ npm run lint      # Run ESLint
 ## Required Environment Variables
 
 ```
-MONGODB_URI          # MongoDB connection string (falls back to MONGO_URI_LOCAL)
+POSTGRES_URL         # Neon PostgreSQL connection string (required by @vercel/postgres)
 NEXTAUTH_SECRET      # NextAuth JWT secret
 GROQ_API_KEY         # Groq API key for LLM calls
 ```
@@ -26,9 +26,9 @@ This is a **Next.js 16 App Router** application — all routes live under `app/`
 ### Data Flow
 
 - **Auth**: NextAuth with `CredentialsProvider` (`lib/auth.ts`). Passwords hashed with bcrypt. JWT strategy — `session.user.id` is populated from the JWT token in the `session` callback.
-- **Database**: Mongoose connecting to MongoDB (`lib/db.ts`). Connection is module-level cached via an `isConnected` flag. All API routes call `connectDB()` before any DB access.
-- **User model** (`models/User.ts`): stores `username`, `password` (hashed), and `resume` (plain text, stored on the user record — not a separate collection).
-- **Job model** (`models/Job.ts`): stores `userId` (string, indexed), `company`, `position`, `status`, `location`, `salary`, `jobDescription`, `notes`.
+- **Database**: Neon PostgreSQL via `@vercel/postgres` (`lib/db.ts`). Schema is lazily initialized via `ensureSchema()` (called at the top of every API route). Two tables: `users` and `jobs`.
+- **users table**: `id` (UUID PK), `username` (TEXT UNIQUE), `password` (TEXT hashed), `resume` (TEXT).
+- **jobs table**: `id` (UUID PK), `user_id` (TEXT, indexed), `company`, `position`, `status`, `location`, `salary`, `job_description`, `notes`, `created_at`.
 
 ### API Routes
 
