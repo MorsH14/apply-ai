@@ -404,19 +404,34 @@ export default function AtsScorePage() {
                   {/* Score hero */}
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="p-6">
+                      {(() => {
+                        const isRescan = prevScore !== null;
+                        const qualLabel =
+                          isRescan && s.score >= 90 ? { text: 'Excellent', color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-200' } :
+                          isRescan && s.score >= 80 ? { text: 'Strong',    color: 'text-blue-600',    bg: 'bg-blue-50',    border: 'border-blue-200'    } :
+                          isRescan && s.score >= 72 ? { text: 'Good',      color: 'text-blue-500',    bg: 'bg-blue-50',    border: 'border-blue-100'    } :
+                          null;
+                        return (
                       <div className="flex items-center gap-5 mb-4">
                         <div className="flex flex-col items-center">
-                          <div className="flex items-baseline gap-0.5">
-                            <span className={`text-6xl font-black tabular-nums ${scoreColor(s.score)}`}>{s.score}</span>
-                            <span className={`text-2xl font-bold ${scoreColor(s.score)}`}>/100</span>
-                          </div>
-                          {prevScore !== null && prevScore !== s.score && (
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full mt-1 ${
-                              s.score > prevScore
+                          {qualLabel ? (
+                            <div className={`flex flex-col items-center justify-center w-24 h-24 rounded-2xl border-2 ${qualLabel.bg} ${qualLabel.border}`}>
+                              <Check size={22} className={`${qualLabel.color} mb-1`} strokeWidth={2.5} />
+                              <span className={`text-xl font-black ${qualLabel.color}`}>{qualLabel.text}</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-baseline gap-0.5">
+                              <span className={`text-6xl font-black tabular-nums ${scoreColor(s.score)}`}>{s.score}</span>
+                              <span className={`text-2xl font-bold ${scoreColor(s.score)}`}>/100</span>
+                            </div>
+                          )}
+                          {isRescan && prevScore !== s.score && (
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full mt-1.5 ${
+                              s.score > prevScore!
                                 ? 'bg-emerald-100 text-emerald-700'
                                 : 'bg-rose-100 text-rose-600'
                             }`}>
-                              {s.score > prevScore ? `+${s.score - prevScore}` : `${s.score - prevScore}`} pts
+                              {s.score > prevScore! ? `+${s.score - prevScore!}` : `${s.score - prevScore!}`} pts
                             </span>
                           )}
                         </div>
@@ -444,6 +459,8 @@ export default function AtsScorePage() {
                       )}
                     </div>
                   </div>
+                        );
+                      })()}
 
                   {/* Strengths */}
                   {s.strengths?.length > 0 && (
