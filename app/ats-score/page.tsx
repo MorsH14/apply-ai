@@ -449,6 +449,8 @@ export default function AtsScorePage() {
                           </div>
                         </div>
                       </div>
+                        );
+                      })()}
                       <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
                         {s.verdict}
                       </p>
@@ -459,8 +461,6 @@ export default function AtsScorePage() {
                       )}
                     </div>
                   </div>
-                        );
-                      })()}
 
                   {/* Strengths */}
                   {s.strengths?.length > 0 && (
