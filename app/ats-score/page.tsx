@@ -6,7 +6,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import {
   Target, Sparkles, AlertCircle, Check, ArrowLeft, FileText,
-  Download, Copy, RotateCcw, ChevronDown, ChevronUp, TrendingUp,
+  Download, Copy, RotateCcw, ChevronDown, ChevronUp, TrendingUp, Wand2,
 } from 'lucide-react';
 
 const TemplatePickerModal = dynamic(() => import('@/components/TemplatePickerModal'), { ssr: false });
@@ -71,6 +71,11 @@ export default function AtsScorePage() {
   const [boostResult, setBoostResult] = useState<string | null>(null);
   const [boostLoading, setBoostLoading] = useState(false);
 
+  const [fixResult, setFixResult] = useState<string | null>(null);
+  const [fixingItem, setFixingItem] = useState<AtsImprovement | null>(null);
+  const [fixSaved, setFixSaved] = useState(false);
+  const [fixSaving, setFixSaving] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -134,6 +139,42 @@ export default function AtsScorePage() {
     } finally {
       setBoostLoading(false);
     }
+  };
+
+  const runFix = async (imp: AtsImprovement) => {
+    if (!myResume) return;
+    setFixingItem(imp);
+    setFixResult(null);
+    setFixSaved(false);
+    setAtsError(null);
+    try {
+      const res = await fetch('/api/ai/resume-fix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resume: myResume, improvement: imp.text, category: imp.category }),
+      });
+      const data = await res.json();
+      if (!res.ok) setAtsError(data.error || 'Fix failed');
+      else setFixResult(data.result);
+    } catch {
+      setAtsError('Network error — please try again.');
+    } finally {
+      setFixingItem(null);
+    }
+  };
+
+  const saveFixAsResume = async () => {
+    if (!fixResult) return;
+    setFixSaving(true);
+    await fetch('/api/resume', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume: fixResult }),
+    });
+    setMyResume(fixResult);
+    setFixSaved(true);
+    setFixSaving(false);
+    showToast('Resume updated with fix');
   };
 
   const saveAsResume = async () => {
@@ -453,20 +494,97 @@ export default function AtsScorePage() {
                               group.p === 'high' ? 'text-rose-500' : group.p === 'medium' ? 'text-amber-500' : 'text-blue-500'
                             }`}>{group.label}</p>
                             <div className="space-y-2">
-                              {group.items.map((imp, i) => (
-                                <div key={i} className="flex items-start gap-2.5 rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-2.5">
-                                  <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${priorityStyle[imp.priority].dot}`} />
-                                  <div className="flex-1 min-w-0">
-                                    <span className={`inline-flex text-[10px] font-bold border px-1.5 py-0.5 rounded-md mr-1.5 ${priorityStyle[imp.priority].badge}`}>
-                                      {imp.category}
-                                    </span>
-                                    <span className="text-xs text-slate-700 leading-snug">{imp.text}</span>
+                              {group.items.map((imp, i) => {
+                                const isFixing = fixingItem === imp;
+                                return (
+                                  <div key={i} className="rounded-xl border border-slate-100 bg-slate-50 px-3.5 py-2.5">
+                                    <div className="flex items-start gap-2.5">
+                                      <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${priorityStyle[imp.priority].dot}`} />
+                                      <div className="flex-1 min-w-0">
+                                        <span className={`inline-flex text-[10px] font-bold border px-1.5 py-0.5 rounded-md mr-1.5 ${priorityStyle[imp.priority].badge}`}>
+                                          {imp.category}
+                                        </span>
+                                        <span className="text-xs text-slate-700 leading-snug">{imp.text}</span>
+                                      </div>
+                                      <button
+                                        onClick={() => runFix(imp)}
+                                        disabled={isFixing || !!fixingItem}
+                                        className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 hover:text-violet-800 bg-white border border-violet-200 hover:border-violet-300 px-2 py-1 rounded-lg transition-colors shrink-0 disabled:opacity-40"
+                                      >
+                                        {isFixing
+                                          ? <><div className="w-3 h-3 border-2 border-violet-300 border-t-violet-600 rounded-full animate-spin" />Fixing…</>
+                                          : <><Wand2 size={11} />Fix</>
+                                        }
+                                      </button>
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Fix result panel */}
+                  {fixResult && (
+                    <div className="bg-white rounded-2xl border border-violet-200 shadow-sm overflow-hidden">
+                      <div className="flex items-center justify-between px-5 py-4 bg-violet-50 border-b border-violet-200">
+                        <div className="flex items-center gap-2">
+                          <Wand2 size={14} className="text-violet-600" />
+                          <span className="text-sm font-bold text-violet-900">Fixed Resume</span>
+                          <span className="text-[10px] font-medium text-violet-600 bg-violet-100 px-1.5 py-0.5 rounded-md">1 improvement applied</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => copy(fixResult)}
+                            className="flex items-center gap-1.5 text-xs text-violet-600 hover:text-violet-800 bg-white border border-violet-200 px-2.5 py-1.5 rounded-lg font-semibold transition-colors"
+                          >
+                            {copied ? <><Check size={11} />Copied</> : <><Copy size={11} />Copy</>}
+                          </button>
+                          <button
+                            onClick={() => setTemplateModal({ content: fixResult, type: 'resume', company, position })}
+                            className="flex items-center gap-1.5 text-xs text-white bg-violet-600 hover:bg-violet-700 px-2.5 py-1.5 rounded-lg font-semibold transition-colors"
+                          >
+                            <Download size={11} />PDF
+                          </button>
+                        </div>
+                      </div>
+
+                      <pre className="p-5 text-[13px] text-slate-700 whitespace-pre-wrap font-mono leading-relaxed max-h-72 overflow-y-auto bg-white">
+                        {fixResult}
+                      </pre>
+
+                      <div className="px-5 py-4 border-t border-violet-100 bg-violet-50/50 space-y-2">
+                        <p className="text-xs text-slate-500">Save this as your resume, then re-scan to see your updated score.</p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={saveFixAsResume}
+                            disabled={fixSaving || fixSaved}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                              fixSaved
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-gradient-to-r from-blue-600 to-violet-600 text-white hover:from-blue-700 hover:to-violet-700 shadow-sm shadow-blue-500/20'
+                            }`}
+                          >
+                            {fixSaving
+                              ? <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Saving…</>
+                              : fixSaved
+                                ? <><Check size={14} />Saved</>
+                                : <><FileText size={14} />Save as My Resume</>
+                            }
+                          </button>
+                          {fixSaved && (
+                            <button
+                              onClick={() => runScore(fixResult)}
+                              disabled={atsLoading}
+                              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm font-semibold transition-colors shrink-0"
+                            >
+                              <RotateCcw size={13} />Re-scan
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
