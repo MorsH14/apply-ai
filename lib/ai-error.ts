@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 /**
- * Parses an AI API error (Groq or any LLM) and returns a NextResponse with a
+ * Parses an AI API error (Gemini or any LLM) and returns a NextResponse with a
  * user-friendly message. Call this from every AI route's outer catch block.
  */
 export function handleAiError(err: unknown): NextResponse {
@@ -29,7 +29,7 @@ export function handleAiError(err: unknown): NextResponse {
   // 401 — bad API key
   if (status === 401) {
     return NextResponse.json(
-      { error: "AI service authentication failed. Please check your GROQ_API_KEY." },
+      { error: "AI service authentication failed. Please check your GEMINI_API_KEY." },
       { status: 500 }
     );
   }
@@ -37,7 +37,7 @@ export function handleAiError(err: unknown): NextResponse {
   // 403 — key lacks permission or model restricted
   if (status === 403) {
     return NextResponse.json(
-      { error: "Your API key does not have access to this model. Check your plan at console.groq.com." },
+      { error: "Your API key does not have access to this model. Check your plan at aistudio.google.com." },
       { status: 500 }
     );
   }
