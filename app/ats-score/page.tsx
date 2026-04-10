@@ -154,7 +154,7 @@ export default function AtsScorePage() {
       const res = await fetch('/api/ai/resume-fix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resume: myResume, improvements }),
+        body: JSON.stringify({ resume: myResume, improvements, jobDescription, company, position }),
       });
       const data = await res.json();
       if (!res.ok) setAtsError(data.error || 'Fix failed');
