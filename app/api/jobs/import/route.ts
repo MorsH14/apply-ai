@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import Groq from "groq-sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
@@ -15,8 +15,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "URL is required" }, { status: 400 });
   }
 
-  if (!process.env.GROQ_API_KEY) {
-    return NextResponse.json({ error: "GROQ_API_KEY is not set" }, { status: 500 });
+  if (!process.env.GEMINI_API_KEY) {
+    return NextResponse.json({ error: "GEMINI_API_KEY is not set" }, { status: 500 });
   }
 
   // Fetch via Jina Reader — renders JS-heavy ATS pages (Ashby, Zoho, Workday, Greenhouse, etc.)
@@ -54,21 +54,18 @@ export async function POST(request: Request) {
     );
   }
 
-  // Extract structured fields with Groq
   try {
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      systemInstruction: "You are a data extraction assistant. Extract structured job listing information from webpage content. Return ONLY valid JSON with no commentary.",
+    });
 
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a data extraction assistant. Extract structured job listing information from webpage content. Return ONLY valid JSON with no commentary.",
-        },
+    const result = await model.generateContent({
+      contents: [
         {
           role: "user",
-          content: `Extract job listing details from the content below. Return a JSON object with exactly these fields:
+          parts: [{ text: `Extract job listing details from the content below. Return a JSON object with exactly these fields:
 {
   "company": "company name or empty string",
   "position": "job title or empty string",
@@ -80,14 +77,16 @@ export async function POST(request: Request) {
 If a field is not present, return an empty string. Never fabricate data.
 
 PAGE CONTENT:
-${text}`,
+${text}` }],
         },
       ],
-      max_tokens: 2048,
-      response_format: { type: "json_object" },
+      generationConfig: {
+        responseMimeType: "application/json",
+        maxOutputTokens: 2048,
+      },
     });
 
-    const raw = completion.choices[0].message.content ?? "{}";
+    const raw = result.response.text();
     const data = JSON.parse(raw);
 
     if (!data.jobDescription || data.jobDescription.trim().length < 50) {
@@ -104,12 +103,9 @@ ${text}`,
       salary: data.salary ?? "",
       jobDescription: data.jobDescription ?? "",
     });
-  } catch (groqErr: unknown) {
-    const msg = groqErr instanceof Error ? groqErr.message : String(groqErr);
-    console.error("Groq extraction error:", msg);
-    return NextResponse.json(
-      { error: "Failed to extract job details. Try again." },
-      { status: 500 }
-    );
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("Gemini extraction error:", msg);
+    return NextResponse.json({ error: "Failed to extract job details. Try again." }, { status: 500 });
   }
 }

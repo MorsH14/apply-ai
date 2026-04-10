@@ -1,25 +1,24 @@
 import { NextResponse } from "next/server";
 
 /**
- * Parses a Groq (or any LLM) API error and returns a NextResponse with a
+ * Parses an AI API error (Gemini or any LLM) and returns a NextResponse with a
  * user-friendly message. Call this from every AI route's outer catch block.
  */
 export function handleAiError(err: unknown): NextResponse {
   const status = (err as { status?: number })?.status;
   const message = err instanceof Error ? err.message : String(err);
 
-  // Groq 429 — daily / per-minute token limit
-  if (status === 429 || message.includes("rate_limit_exceeded") || message.includes("Rate limit")) {
-    // Try to extract "try again in Xm" from the message
+  // 429 — quota / rate limit
+  if (status === 429 || message.includes("quota") || message.includes("rate_limit") || message.includes("Rate limit")) {
     const waitMatch = message.match(/try again in ([^.]+)/i);
     const wait = waitMatch ? ` Try again in ${waitMatch[1]}.` : " Please try again later.";
     return NextResponse.json(
-      { error: `You've reached the daily AI usage limit.${wait} If you need more capacity, upgrade your Groq plan at console.groq.com/settings/billing.` },
+      { error: `You've reached the AI usage limit.${wait} If you need more capacity, check your API plan.` },
       { status: 429 }
     );
   }
 
-  // Groq 503 / 500 — model overloaded
+  // 503 / 500 — model overloaded
   if (status === 503 || status === 500) {
     return NextResponse.json(
       { error: "The AI model is temporarily overloaded. Please wait a moment and try again." },
@@ -27,15 +26,23 @@ export function handleAiError(err: unknown): NextResponse {
     );
   }
 
-  // Groq 401 — bad API key
+  // 401 — bad API key
   if (status === 401) {
     return NextResponse.json(
-      { error: "AI service authentication failed. Please check your GROQ_API_KEY." },
+      { error: "AI service authentication failed. Please check your GEMINI_API_KEY." },
+      { status: 500 }
+    );
+  }
+
+  // 403 — key lacks permission or model restricted
+  if (status === 403) {
+    return NextResponse.json(
+      { error: "Your API key does not have access to this model. Check your plan at aistudio.google.com." },
       { status: 500 }
     );
   }
 
   // Generic fallback
-  console.error("AI route error:", message);
+  console.error("AI route error (status=%s):", status ?? "none", message);
   return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
 }

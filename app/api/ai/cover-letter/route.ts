@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import Groq from "groq-sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { handleAiError } from "@/lib/ai-error";
@@ -12,11 +12,10 @@ export async function POST(request: Request) {
 
   const { jobDescription, resume, company, position } = await request.json();
 
-  if (!process.env.GROQ_API_KEY) {
-    return NextResponse.json({ error: "GROQ_API_KEY is not set in .env.local" }, { status: 500 });
+  if (!process.env.GEMINI_API_KEY) {
+    return NextResponse.json({ error: "GEMINI_API_KEY is not set in .env.local" }, { status: 500 });
   }
 
-  // Enforce reasonable input limits
   if (!jobDescription || !resume) {
     return NextResponse.json({ error: "Job description and resume are required" }, { status: 400 });
   }
@@ -28,18 +27,17 @@ export async function POST(request: Request) {
   });
 
   try {
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      systemInstruction: `You are an elite career coach and professional writer with 20+ years placing candidates at top-tier companies. You write cover letters that consistently get callbacks because they feel human, specific, and confident — never generic, never sycophantic. You write with the economy of a journalist and the persuasion of a copywriter.`,
+    });
 
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        {
-          role: "system",
-          content: `You are an elite career coach and professional writer with 20+ years placing candidates at top-tier companies. You write cover letters that consistently get callbacks because they feel human, specific, and confident — never generic, never sycophantic. You write with the economy of a journalist and the persuasion of a copywriter.`,
-        },
+    const result = await model.generateContent({
+      contents: [
         {
           role: "user",
-          content: `Write a high-impact, personalised cover letter for this application. Today's date is ${today}.
+          parts: [{ text: `Write a high-impact, personalised cover letter for this application. Today's date is ${today}.
 
 ROLE: ${position} at ${company}
 
@@ -97,13 +95,13 @@ TONE AND STYLE:
 - Target 280–340 words for the body only
 - Sound like a real person wrote this, not a template
 
-Return ONLY the formatted cover letter. Zero commentary, no "Here is your cover letter:", no preamble.`,
+Return ONLY the formatted cover letter. Zero commentary, no "Here is your cover letter:", no preamble.` }],
         },
       ],
-      max_tokens: 1500,
+      generationConfig: { maxOutputTokens: 1500 },
     });
 
-    const text = completion.choices[0].message.content ?? "";
+    const text = result.response.text();
     return NextResponse.json({ result: text });
   } catch (err: unknown) {
     return handleAiError(err);

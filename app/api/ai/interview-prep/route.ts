@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import Groq from "groq-sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { handleAiError } from "@/lib/ai-error";
@@ -12,8 +12,8 @@ export async function POST(request: Request) {
 
   const { jobDescription, resume, company, position } = await request.json();
 
-  if (!process.env.GROQ_API_KEY) {
-    return NextResponse.json({ error: "GROQ_API_KEY is not set" }, { status: 500 });
+  if (!process.env.GEMINI_API_KEY) {
+    return NextResponse.json({ error: "GEMINI_API_KEY is not set" }, { status: 500 });
   }
 
   if (!jobDescription || !resume) {
@@ -21,19 +21,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      systemInstruction: `You are an elite interview coach who has prepped candidates for Google, Meta, McKinsey, and top startups. You give brutally honest, resume-specific coaching — never generic advice. You know exactly what interviewers at different company types actually ask and why.`,
+    });
 
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are an elite interview coach who has prepped candidates for Google, Meta, McKinsey, and top startups. You give brutally honest, resume-specific coaching — never generic advice. You know exactly what interviewers at different company types actually ask and why.",
-        },
+    const result = await model.generateContent({
+      contents: [
         {
           role: "user",
-          content: `Prepare this candidate for their interview at ${company} for the ${position} role.
+          parts: [{ text: `Prepare this candidate for their interview at ${company} for the ${position} role.
 
 JOB DESCRIPTION:
 ${jobDescription.slice(0, 3000)}
@@ -60,31 +58,27 @@ Return ONLY valid JSON in this exact format:
       "guidance": "3-4 sentence coaching note tied to this candidate's specific resume"
     }
   ]
-}`,
+}` }],
         },
       ],
-      max_tokens: 2500,
-      response_format: { type: "json_object" },
+      generationConfig: {
+        responseMimeType: "application/json",
+        maxOutputTokens: 2500,
+      },
     });
 
-    const raw = completion.choices[0].message.content ?? "{}";
+    const raw = result.response.text();
 
     let data: { questions?: unknown[] };
     try {
       data = JSON.parse(raw);
     } catch {
       console.error("Interview prep JSON parse error — raw:", raw.slice(0, 200));
-      return NextResponse.json(
-        { error: "Failed to parse AI response. Please try again." },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Failed to parse AI response. Please try again." }, { status: 500 });
     }
 
     if (!Array.isArray(data.questions) || data.questions.length === 0) {
-      return NextResponse.json(
-        { error: "No questions were generated. Please try again." },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "No questions were generated. Please try again." }, { status: 500 });
     }
 
     return NextResponse.json(data);
