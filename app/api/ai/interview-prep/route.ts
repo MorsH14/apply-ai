@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { handleAiError } from "@/lib/ai-error";
@@ -12,8 +12,8 @@ export async function POST(request: Request) {
 
   const { jobDescription, resume, company, position } = await request.json();
 
-  if (!process.env.GEMINI_API_KEY) {
-    return NextResponse.json({ error: "GEMINI_API_KEY is not set" }, { status: 500 });
+  if (!process.env.GROQ_API_KEY) {
+    return NextResponse.json({ error: "GROQ_API_KEY is not set" }, { status: 500 });
   }
 
   if (!jobDescription || !resume) {
@@ -21,17 +21,16 @@ export async function POST(request: Request) {
   }
 
   try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      systemInstruction: `You are an elite interview coach who has prepped candidates for Google, Meta, McKinsey, and top startups. You give brutally honest, resume-specific coaching — never generic advice. You know exactly what interviewers at different company types actually ask and why.`,
-    });
-
-    const result = await model.generateContent({
-      contents: [
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const completion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: "system",
+          content: "You are an elite interview coach who has prepped candidates for Google, Meta, McKinsey, and top startups. You give brutally honest, resume-specific coaching — never generic advice. You know exactly what interviewers at different company types actually ask and why.",
+        },
         {
           role: "user",
-          parts: [{ text: `Prepare this candidate for their interview at ${company} for the ${position} role.
+          content: `Prepare this candidate for their interview at ${company} for the ${position} role.
 
 JOB DESCRIPTION:
 ${jobDescription.slice(0, 3000)}
@@ -58,16 +57,15 @@ Return ONLY valid JSON in this exact format:
       "guidance": "3-4 sentence coaching note tied to this candidate's specific resume"
     }
   ]
-}` }],
+}`,
         },
       ],
-      generationConfig: {
-        responseMimeType: "application/json",
-        maxOutputTokens: 2500,
-      },
+      model: "llama-3.3-70b-versatile",
+      response_format: { type: "json_object" },
+      max_tokens: 2500,
     });
 
-    const raw = result.response.text();
+    const raw = completion.choices[0]?.message?.content ?? "";
 
     let data: { questions?: unknown[] };
     try {
