@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Groq from "groq-sdk";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { handleAiError } from "@/lib/ai-error";
@@ -12,8 +12,8 @@ export async function POST(request: Request) {
 
   const { jobDescription, resume } = await request.json();
 
-  if (!process.env.GEMINI_API_KEY) {
-    return NextResponse.json({ error: "GEMINI_API_KEY is not set" }, { status: 500 });
+  if (!process.env.GROQ_API_KEY) {
+    return NextResponse.json({ error: "GROQ_API_KEY is not set" }, { status: 500 });
   }
 
   if (!resume) {
@@ -58,7 +58,7 @@ Return ONLY valid JSON:
   "strengths": [<up to 4 specific things the resume does well>],
   "top_fix": "<single most impactful one-sentence action>"
 }`
-    : `You are a professional resume coach. Analyse this resume for overall quality and return detailed, actionable feedback.
+    : `Analyse this resume for overall quality and return detailed, actionable feedback.
 
 CANDIDATE RESUME:
 ${resume.slice(0, 4000)}
@@ -96,21 +96,23 @@ Return ONLY valid JSON:
 Be direct and specific. Reference actual content from the resume when identifying issues. Never inflate scores.`;
 
   try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      systemInstruction: `You are a senior resume coach and ATS expert. You give precise, honest, actionable assessments. Never inflate scores — a 65% resume scores 65%, not 80%.`,
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        {
+          role: "system",
+          content: "You are a senior resume coach and ATS expert. You give precise, honest, actionable assessments. Never inflate scores — a 65% resume scores 65%, not 80%. Return only valid JSON.",
+        },
+        { role: "user", content: prompt },
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: 1800,
     });
 
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        maxOutputTokens: 1800,
-      },
-    });
+    const raw = completion.choices[0]?.message?.content ?? "";
 
-    const raw = result.response.text();
+
     let data: Record<string, unknown>;
     try {
       data = JSON.parse(raw);

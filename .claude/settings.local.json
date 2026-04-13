@@ -9,7 +9,8 @@
       "Bash(npm run:*)",
       "Bash(npm uninstall:*)",
       "Bash(rm:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npx eslint:*)"
     ]
   }
 }
